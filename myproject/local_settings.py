@@ -34,7 +34,9 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     'localhost:8000',
-    'b54f-2600-4040-4651-e600-ad65-4f90-1b03-b82d.ngrok-free.app'
+    'b54f-2600-4040-4651-e600-ad65-4f90-1b03-b82d.ngrok-free.app',
+    'followupohuru.onrender.com',
+
 ]
 
 # Logging configuration
