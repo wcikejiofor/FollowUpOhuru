@@ -913,7 +913,6 @@ def oauth2callback(request):
 
 @csrf_exempt
 @require_POST
-@csrf_exempt
 def stripe_webhook(request):
     logger.info("Received a webhook request from Stripe")
     payload = request.body
