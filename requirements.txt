@@ -1,0 +1,15 @@
+django~=4.2.17
+gunicorn
+google-auth-oauthlib
+google-api-python-client
+openai~=1.58.1
+twilio~=9.4.1
+dateparser~=1.2.0
+dj-database-url
+python-dotenv~=1.0.1
+psycopg2-binary
+phonenumbers~=8.13.52
+
+pytz~=2023.3.post1
+stripe~=11.5.0
+python-dateutil~=2.8.2

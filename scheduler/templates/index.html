@@ -1,0 +1,20 @@
+<!-- scheduler/templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appointment Scheduler</title>
+</head>
+<body>
+    <h1>Welcome to the Appointment Scheduler1</h1>
+
+    <form action="{% url 'send_sms' %}" method="POST">
+        {% csrf_token %}
+        <input type="text" name="message" placeholder="Enter your appointment details">
+        <input type="submit" value="Send SMS">
+    </form>
+
+    <a href="{% url 'authorize_google' %}">Connect Google Calendar</a>
+</body>
+</html>
