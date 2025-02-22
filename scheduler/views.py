@@ -94,11 +94,6 @@ def validate_twilio_request(f):
 
 
 @csrf_exempt
-def index(request):
-    return render(request, 'index.html')
-
-
-@csrf_exempt
 @validate_twilio_request
 def handle_call(request):
     """Handle incoming voice calls"""
