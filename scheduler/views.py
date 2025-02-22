@@ -56,44 +56,39 @@ os.environ['GOOGLE_API_USE_MTLS_ENDPOINT'] = 'never'
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Only for development
 
 
+@csrf_exempt
 def validate_twilio_request(f):
-    """Validates that incoming requests are from Twilio"""
-
     @wraps(f)
     def decorated_function(request, *args, **kwargs):
-        # Add debug logging
-        logger.debug("Validating Twilio request...")
-        logger.debug(f"Request URL: {request.build_absolute_uri()}")
-        logger.debug(f"Twilio signature: {request.META.get('HTTP_X_TWILIO_SIGNATURE', 'None')}")
-        logger.debug(f"POST data: {request.POST}")
-
-        # Check if TWILIO_AUTH_TOKEN is set
-        if not settings.TWILIO_AUTH_TOKEN:
-            logger.error("TWILIO_AUTH_TOKEN not found in settings")
-            return f(request, *args, **kwargs)  # Continue anyway in development
-
-        validator = RequestValidator(settings.TWILIO_AUTH_TOKEN)
-
-        # For development, you might want to bypass validation
+        # More permissive validation
         if settings.DEBUG:
             logger.warning("Debug mode: Bypassing Twilio validation")
             return f(request, *args, **kwargs)
 
         try:
+            validator = RequestValidator(settings.TWILIO_AUTH_TOKEN)
+
+            # Detailed logging
+            logger.debug(f"Request URL: {request.build_absolute_uri()}")
+            logger.debug(
+                f"Twilio Signature: {request.META.get('HTTP_X_TWILIO_SIGNATURE', 'No signature')}")
+            logger.debug(f"POST Data: {dict(request.POST)}")
+
             request_valid = validator.validate(
                 request.build_absolute_uri(),
                 request.POST,
                 request.META.get('HTTP_X_TWILIO_SIGNATURE', '')
             )
+
             if request_valid:
                 return f(request, *args, **kwargs)
+
             logger.error("Twilio validation failed")
-            return HttpResponseForbidden()
+            return HttpResponseForbidden("Invalid Twilio request")
+
         except Exception as e:
-            logger.error(f"Validation error: {str(e)}")
-            if settings.DEBUG:
-                return f(request, *args, **kwargs)  # Continue anyway in development
-            return HttpResponseForbidden()
+            logger.error(f"Validation Error: {str(e)}")
+            return HttpResponseForbidden(f"Validation error: {str(e)}")
 
     return decorated_function
 
@@ -176,6 +171,11 @@ def handle_transcription(request):
 @csrf_exempt
 @validate_twilio_request
 def sms_handler(request):
+    logger.error("SMS Handler Called")
+    logger.error(f"Request Method: {request.method}")
+    logger.error(f"Request Headers: {request.headers}")
+    logger.error(f"Request META: {request.META}")
+
     """Handle incoming SMS messages"""
     if request.method == 'POST':
         # Get original phone number from Twilio
@@ -536,6 +536,7 @@ def handle_starter_signup(user_profile, response):
         return HttpResponse(str(response), content_type='application/xml')
 
 
+@csrf_exempt
 def handle_business_signup(user_profile, response):
     try:
         # Generate Stripe Checkout URL
@@ -810,6 +811,7 @@ def ivr_menu(request):
     return HttpResponse(str(response), content_type='text/xml')
 
 
+@csrf_exempt
 def check_credentials(request):
     """Debug endpoint to check stored credentials"""
     creds = GoogleCredentials.objects.all()
@@ -825,6 +827,7 @@ def check_credentials(request):
         return HttpResponse("No credentials found in database")
 
 
+@csrf_exempt
 def voicemail(request):
     """Handle voicemail recording"""
     response = VoiceResponse()
@@ -833,12 +836,14 @@ def voicemail(request):
     return HttpResponse(str(response), content_type='text/xml')
 
 
+@csrf_exempt
 def check_session(request):
     """Debug endpoint to check session data"""
     credentials = request.session.get('credentials', 'No credentials found')
     return HttpResponse(f"Session contents: {credentials}")
 
 
+@csrf_exempt
 def get_credentials():
     """Utility function to get credentials for a user"""
     from .models import UserProfile
@@ -854,6 +859,7 @@ def get_credentials():
     )
 
 
+@csrf_exempt
 def answer_call(request):
     """Handle basic incoming calls"""
     response = VoiceResponse()
@@ -861,6 +867,7 @@ def answer_call(request):
     return HttpResponse(str(response), content_type='text/xml')
 
 
+@csrf_exempt
 def credentials_to_dict(credentials):
     """Convert Google credentials object to dictionary"""
     return {
@@ -873,6 +880,7 @@ def credentials_to_dict(credentials):
     }
 
 
+@csrf_exempt
 def oauth2callback(request):
     """Handle Google OAuth callback"""
     try:
@@ -950,6 +958,7 @@ def stripe_webhook(request):
     return HttpResponse(status=200)
 
 
+@csrf_exempt
 def handle_checkout_session_completed(event):
     session = event['data']['object']
     customer_id = session.get('customer')
@@ -990,6 +999,7 @@ def handle_checkout_session_completed(event):
         logger.error(f"Error starting onboarding for user {user_id}: {str(e)}")
 
 
+@csrf_exempt
 def handle_payment_succeeded(event):
     invoice = event['data']['object']
     customer_id = invoice['customer']
@@ -1035,6 +1045,7 @@ def handle_payment_succeeded(event):
         logger.error(traceback.format_exc())
 
 
+@csrf_exempt
 def handle_subscription_created(event):
     subscription = event['data']['object']
     customer_id = subscription['customer']
@@ -1091,6 +1102,7 @@ def handle_subscription_created(event):
         logger.error(traceback.format_exc())
 
 
+@csrf_exempt
 def handle_subscription_updated(event):
     subscription = event['data']['object']
     customer_id = subscription['customer']
@@ -1110,6 +1122,7 @@ def handle_subscription_updated(event):
     send_sms(user_profile.phone_number, message)
 
 
+@csrf_exempt
 def get_plan_name(plan_id):
     # Implement this to return the human-readable plan name based on the Stripe price ID
     # You might want to store this mapping in your database or settings
@@ -1121,6 +1134,7 @@ def get_plan_name(plan_id):
     return plan_mapping.get(plan_id, 'Unknown Plan')
 
 
+@csrf_exempt
 def redirect_short_link(request, short_code):
     try:
         # Log the incoming short code
