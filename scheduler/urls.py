@@ -1,14 +1,13 @@
 from django.urls import path
 from . import views
 from .views import (
-    index, authorize_google, oauth2callback,
+    authorize_google, oauth2callback,
     handle_call, ivr_menu, voicemail,
     sms_handler, answer_call, check_credentials,
     handle_transcription
 )
 
 urlpatterns = [
-    path('', index, name='index'),  # Home page
     # Removed send_sms path as it's no longer in views
     path('authorize/<int:user_id>/', authorize_google, name='authorize_google'),
     path('oauth2callback/', oauth2callback, name='oauth2callback'),
