@@ -1,3 +1,32 @@
-# .gitignore
-config/credentials.json
+# Sensitive Files
 .env
+config/credentials.json
+*.json
+
+# Python-specific ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database files
+*.sqlite3
+db.sqlite3
+
+# Client secrets
+client_secret_*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE-specific files
+.idea/
+.vscode/
+*.swp
+*.swo
