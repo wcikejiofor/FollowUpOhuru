@@ -38,7 +38,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 import os
 import json
 import tempfile
@@ -51,7 +50,13 @@ if google_client_secrets:
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
         temp_file.write(google_client_secrets)
         GOOGLE_CLIENT_SECRETS_FILE = temp_file.name
+else:
+    # Fallback to a default path or raise an error
+    GOOGLE_CLIENT_SECRETS_FILE = os.path.join(BASE_DIR, 'config', 'client_secrets.json')
 
+    # Optional: Add logging to help diagnose the issue
+    logger.error(
+        f"No GOOGLE_CLIENT_SECRETS found in environment. Falling back to {GOOGLE_CLIENT_SECRETS_FILE}")
 
 # Then right after your ALLOWED_HOSTS definition
 # Near the top of your settings.py
