@@ -48,10 +48,6 @@ ALLOWED_HOSTS = [
 ]
 
 
-# Add any additional hosts from environment variables
-if os.getenv('ALLOWED_HOSTS'):
-    ALLOWED_HOSTS.extend(os.getenv('ALLOWED_HOSTS').split(','))
-
 logger.info(f"ALLOWED_HOSTS is set to: {ALLOWED_HOSTS}")
 
 # Update CSRF_TRUSTED_ORIGINS to include your new domain
