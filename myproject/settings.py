@@ -39,13 +39,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Then right after your ALLOWED_HOSTS definition
-ALLOWED_HOSTS = [
-    # 'followupohuru.onrender.com',
-    # 'checkout.chiresearchai.com',
-    # 'localhost',
-    # '127.0.0.1',
-    '*',
-]
+# Near the top of your settings.py
+ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
 # Add these after your ALLOWED_HOSTS setting
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
