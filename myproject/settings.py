@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 # Then right after your ALLOWED_HOSTS definition
 # Near the top of your settings.py
-ALLOWED_HOSTS = ['followupohuru.onrender.com', 'checkout.chiresearchai.com']
+ALLOWED_HOSTS = ['*']  # Let our middleware handle the host checking
 
 # Add these after your ALLOWED_HOSTS setting
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
