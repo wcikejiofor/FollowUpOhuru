@@ -1,28 +1,21 @@
 import logging
+from django.middleware.common import CommonMiddleware
+from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
-import logging
 
-logger = logging.getLogger(__name__)
-
-
-class AllowedHostsMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    def __call__(self, request):
-        # Get host directly from headers instead of using get_host()
+class CustomCommonMiddleware(CommonMiddleware):
+    def process_request(self, request: HttpRequest):
         host = request.META.get('HTTP_HOST', '')
-        logger.error(f"Custom Middleware - Raw host header: {host}")
+        logger.error(f"Processing request for host: {host}")
 
-        # Store the host in request META to bypass Django's check
-        request.META['HTTP_HOST'] = host
+        allowed_hosts = ['followupohuru.onrender.com', 'checkout.chiresearchai.com']
 
-        # Always allow these hosts
-        if host in ['followupohuru.onrender.com', 'checkout.chiresearchai.com']:
-            logger.error(f"Allowing host: {host}")
-            # Set a flag to indicate this host is pre-approved
-            request.META['HOST_VERIFIED'] = True
+        if host in allowed_hosts:
+            logger.error(f"Host {host} is allowed")
+            # Skip Django's host validation entirely
+            return None
 
-        return self.get_response(request)
+        # Let parent class handle other cases
+        return super().process_request(request)
