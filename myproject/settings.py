@@ -32,18 +32,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Use environment variables for all sensitive information
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG') == 'True'
-# Near the top of the file, after loading environment variables
+# Near the top of the file, after loading environment variables# Add this near the top of settings.py, after your imports
+# Add this near the top of settings.py, after your imports
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Then right after your ALLOWED_HOSTS definition
 ALLOWED_HOSTS = [
-    #'followupohuru.onrender.com',
-    #'checkout.chiresearchai.com',
-    #'localhost',
-    #'127.0.0.1',
+    # 'followupohuru.onrender.com',
+    # 'checkout.chiresearchai.com',
+    # 'localhost',
+    # '127.0.0.1',
     '*',
 ]
+
 
 # Add any additional hosts from environment variables
 if os.getenv('ALLOWED_HOSTS'):
     ALLOWED_HOSTS.extend(os.getenv('ALLOWED_HOSTS').split(','))
+
+logger.info(f"ALLOWED_HOSTS is set to: {ALLOWED_HOSTS}")
 
 # Update CSRF_TRUSTED_ORIGINS to include your new domain
 CSRF_TRUSTED_ORIGINS = [
@@ -119,8 +128,6 @@ def authorize_google(request):
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-
-
 
 # For ngrok/development, add this
 CSRF_TRUSTED_ORIGINS = [
