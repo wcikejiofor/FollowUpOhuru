@@ -32,7 +32,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Use environment variables for all sensitive information
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG') == 'True'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+# Near the top of the file, after loading environment variables
+ALLOWED_HOSTS = [
+    'followupohuru.onrender.com',
+    'checkout.chiresearchai.com',
+    'localhost',
+    '127.0.0.1',
+]
+
+# Add any additional hosts from environment variables
+if os.getenv('ALLOWED_HOSTS'):
+    ALLOWED_HOSTS.extend(os.getenv('ALLOWED_HOSTS').split(','))
+
+# Update CSRF_TRUSTED_ORIGINS to include your new domain
+CSRF_TRUSTED_ORIGINS = [
+    'https://b54f-2600-4040-4651-e600-ad65-4f90-1b03-b82d.ngrok-free.app',
+    'http://localhost:8000',
+    'https://checkout.chiresearchai.com',
+    'https://followupohuru.onrender.com'
+]
 
 # Twilio Settings
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
@@ -53,7 +71,7 @@ DATABASES = {
 }
 
 # Base URL
-BASE_URL = os.getenv('BASE_URL')
+BASE_URL = os.getenv('BASE_URL', 'https://checkout.chiresearchai.com')
 
 # Google OAuth configuration
 GOOGLE_CLIENT_SECRETS_FILE = os.getenv('GOOGLE_CLIENT_SECRETS_FILE')
@@ -101,8 +119,7 @@ def authorize_google(request):
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# Adjust ALLOWED_HOSTS
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+
 
 # For ngrok/development, add this
 CSRF_TRUSTED_ORIGINS = [
