@@ -38,6 +38,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 # Then right after your ALLOWED_HOSTS definition
 # Near the top of your settings.py
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
@@ -48,6 +49,7 @@ USE_X_FORWARDED_HOST = True
 USE_X_FORWARDED_PORT = True
 
 logger.info(f"ALLOWED_HOSTS is set to: {ALLOWED_HOSTS}")
+logger.error(f"Current ALLOWED_HOSTS: {ALLOWED_HOSTS}")  # Using error level to make sure it shows up in Render logs
 
 # Update CSRF_TRUSTED_ORIGINS to include your new domain
 CSRF_TRUSTED_ORIGINS = [
