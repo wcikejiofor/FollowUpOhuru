@@ -1133,11 +1133,10 @@ def get_plan_name(plan_id):
 def redirect_short_link(request, short_code):
     try:
         # Log the incoming short code
-        logger.error(f"DEBUG: Incoming request for short_code: {short_code}")
-        logger.error(f"DEBUG: Request host header: {request.headers.get('Host')}")
-        logger.error(f"DEBUG: Request META: {request.META}")
-        logger.error(f"DEBUG: ALLOWED_HOSTS: {settings.ALLOWED_HOSTS}")
-        logger.debug(f"Attempting to redirect short code: {short_code}")
+        logger.error(f"DEBUG: Request headers: {dict(request.headers)}")
+        logger.error(f"DEBUG: Host in META: {request.META.get('HTTP_HOST')}")
+        logger.error(f"DEBUG: X-Forwarded-Host: {request.META.get('HTTP_X_FORWARDED_HOST')}")
+        logger.error(f"DEBUG: Current ALLOWED_HOSTS: {settings.ALLOWED_HOSTS}")
 
         # Find the ShortLink in the database
         try:
