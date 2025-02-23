@@ -148,6 +148,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+'scheduler.middleware.AllowedHostsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',  # Move this down
