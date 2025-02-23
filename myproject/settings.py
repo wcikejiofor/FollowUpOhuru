@@ -34,10 +34,11 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG') == 'True'
 # Near the top of the file, after loading environment variables
 ALLOWED_HOSTS = [
-    'followupohuru.onrender.com',
-    'checkout.chiresearchai.com',
-    'localhost',
-    '127.0.0.1',
+    #'followupohuru.onrender.com',
+    #'checkout.chiresearchai.com',
+    #'localhost',
+    #'127.0.0.1',
+    '*',
 ]
 
 # Add any additional hosts from environment variables
