@@ -10,11 +10,8 @@ from django.http import HttpRequest
 logger = logging.getLogger(__name__)
 
 
-class CustomHostMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    def __call__(self, request):
+class CustomCommonMiddleware(CommonMiddleware):
+    def process_request(self, request: HttpRequest):
         host = request.META.get('HTTP_HOST', '')
         logger.error(f"Processing request for host: {host}")
 
@@ -23,15 +20,10 @@ class CustomHostMiddleware:
         if host in allowed_hosts:
             logger.error(f"Host {host} is allowed")
 
-            # Replace the request's get_host method
-            def custom_get_host(*args, **kwargs):
+            # Replace the request's get_host method to always return the current host
+            def get_host_override():
                 return host
 
-            # Monkey patch both the instance and class method
-            request.get_host = custom_get_host
-            HttpRequest.get_host = custom_get_host
-
-            # Also set allowed host directly in request.META
-            request.META['ALLOWED_HOSTS'] = allowed_hosts
-
-        return self.get_response(request)
+            request.get_host = get_host_override
+            return None
+        return super().process_request(request)
