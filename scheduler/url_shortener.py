@@ -38,7 +38,7 @@ class URLShortener:
             logger.debug(f"Short Code: {short_code}")
             logger.debug(f"Original URL: {original_url}")
 
-            shortened_url = f"{settings.BASE_URL}/go/{short_code}"
+            shortened_url = f"{settings.BASE_URL}/checkout/{short_code}"
             logger.debug(f"Full shortened URL: {shortened_url}")
 
             return shortened_url

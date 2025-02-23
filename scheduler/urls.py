@@ -20,5 +20,5 @@ urlpatterns = [
     path('handle_transcription/', handle_transcription, name='handle_transcription'),
     path('stripe/webhook/', views.stripe_webhook, name='stripe_webhook'),
     path('stripe/webhook', views.stripe_webhook, name='stripe_webhook'),
-    path('go/<str:short_code>', views.redirect_short_link, name='short_link_redirect'),
+    path('checkout/<str:short_code>', views.redirect_short_link, name='short_link_redirect'),
 ]
