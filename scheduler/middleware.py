@@ -4,9 +4,17 @@ from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
+import logging
+from django.http import HttpRequest
 
-class CustomCommonMiddleware(CommonMiddleware):
-    def process_request(self, request: HttpRequest):
+logger = logging.getLogger(__name__)
+
+
+class CustomHostMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
         host = request.META.get('HTTP_HOST', '')
         logger.error(f"Processing request for host: {host}")
 
@@ -14,8 +22,16 @@ class CustomCommonMiddleware(CommonMiddleware):
 
         if host in allowed_hosts:
             logger.error(f"Host {host} is allowed")
-            # Skip Django's host validation entirely
-            return None
 
-        # Let parent class handle other cases
-        return super().process_request(request)
+            # Replace the request's get_host method
+            def custom_get_host(*args, **kwargs):
+                return host
+
+            # Monkey patch both the instance and class method
+            request.get_host = custom_get_host
+            HttpRequest.get_host = custom_get_host
+
+            # Also set allowed host directly in request.META
+            request.META['ALLOWED_HOSTS'] = allowed_hosts
+
+        return self.get_response(request)
