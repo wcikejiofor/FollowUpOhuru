@@ -39,6 +39,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+import os
+import json
+import tempfile
+
+# Check if the Google client secrets are in an environment variable
+google_client_secrets = os.environ.get('GOOGLE_CLIENT_SECRETS')
+
+if google_client_secrets:
+    # Create a temporary file with the client secrets
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
+        temp_file.write(google_client_secrets)
+        GOOGLE_CLIENT_SECRETS_FILE = temp_file.name
+
+
 # Then right after your ALLOWED_HOSTS definition
 # Near the top of your settings.py
 ALLOWED_HOSTS = ['*']  # Let our middleware handle the host checking
