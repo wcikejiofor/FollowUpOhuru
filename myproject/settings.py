@@ -284,6 +284,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'scheduler',
+    'scheduler.apps.SchedulerConfig',
 ]
 
 MIDDLEWARE = [
