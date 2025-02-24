@@ -113,7 +113,7 @@ OAUTH2_PROVIDER = {
 APPEND_SLASH = False
 
 # Redirect URI
-OAUTH2_REDIRECT_URI = f"{BASE_URL}/oauth2callback/"
+OAUTH2_REDIRECT_URI = 'https://checkout.chiresearchai.com/oauth2callback/'
 
 
 def authorize_google(request):
