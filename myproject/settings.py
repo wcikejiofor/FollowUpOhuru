@@ -210,17 +210,12 @@ def get_google_client_secrets():
     logger = logging.getLogger(__name__)
 
     # Check environment variable first
-    client_secrets_content = os.environ.get('GOOGLE_CLIENT_SECRETS')
+    client_secrets_content = os.environ.get('GOOGLE_SECRETS')
 
     if client_secrets_content:
         try:
             # Validate JSON
             json_data = json.loads(client_secrets_content)
-
-            # Additional validation for Google client secrets structure
-            if 'web' not in json_data:
-                logger.error("Invalid Google client secrets: 'web' key missing")
-                return None
 
             # Create a temporary file
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
@@ -229,39 +224,22 @@ def get_google_client_secrets():
                 return temp_file.name
 
         except json.JSONDecodeError:
-            logger.error("Invalid JSON in GOOGLE_CLIENT_SECRETS environment variable")
+            logger.error("Invalid JSON in GOOGLE_SECRETS environment variable")
             return None
         except Exception as e:
-            logger.error(f"Error processing GOOGLE_CLIENT_SECRETS: {e}")
+            logger.error(f"Error processing GOOGLE_SECRETS: {e}")
             return None
 
-    # Fallback paths
-    possible_paths = [
-        os.path.join(BASE_DIR, 'client_secrets.json'),
-        os.path.join(BASE_DIR, 'config', 'client_secrets.json'),
-        os.path.join(BASE_DIR, 'secrets', 'client_secrets.json'),
-        os.path.join(BASE_DIR, 'credentials', 'client_secrets.json')
-    ]
-
-    for path in possible_paths:
-        try:
-            if os.path.exists(path):
-                # Validate JSON file contents
-                with open(path, 'r') as f:
-                    json_data = json.load(f)
-                    if 'web' not in json_data:
-                        logger.error(f"Invalid client secrets at {path}: 'web' key missing")
-                        continue
-
-                logger.info(f"Found valid client secrets at {path}")
-                return path
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON in {path}")
-        except Exception as e:
-            logger.error(f"Error reading {path}: {e}")
-
-    logger.error("No valid Google client secrets file found")
+    logger.error("No valid Google client secrets found")
     return None
+
+
+# Set the client secrets file path
+GOOGLE_CLIENT_SECRETS_FILE = get_google_client_secrets()
+
+# Validate and log
+if not GOOGLE_CLIENT_SECRETS_FILE:
+    logger.error("CRITICAL: No valid Google Client Secrets file found!")
 
 
 # Set the client secrets file path

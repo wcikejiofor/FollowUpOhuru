@@ -983,19 +983,64 @@ def credentials_to_dict(credentials):
 def oauth2callback(request):
     """Handle Google OAuth callback"""
     try:
-        user_id = request.GET.get('state')
-        user_profile = UserProfile.objects.get(id=user_id)
+        import os
+        import logging
+        import traceback
+        import json
+        import tempfile
 
+        logger = logging.getLogger(__name__)
+
+        # Log detailed debugging information
+        logger.error(f"Full request GET parameters: {dict(request.GET)}")
+
+        # Check and log GOOGLE_SECRETS
+        google_secrets = os.environ.get('GOOGLE_SECRETS')
+        if google_secrets:
+            # Only log the first few characters to avoid exposing sensitive data
+            logger.error(f"GOOGLE_SECRETS present. First 50 chars: {google_secrets[:50]}...")
+        else:
+            logger.error("GOOGLE_SECRETS environment variable is NOT set")
+
+        # Extract user ID from state parameter
+        user_id = request.GET.get('state')
+
+        if not user_id:
+            logger.error("No user ID found in OAuth callback")
+            return HttpResponse("Invalid OAuth callback: Missing user ID", status=400)
+
+        # Retrieve user profile
+        try:
+            user_profile = UserProfile.objects.get(id=user_id)
+        except UserProfile.DoesNotExist:
+            logger.error(f"No user profile found for ID: {user_id}")
+            return HttpResponse(f"User profile not found for ID {user_id}", status=404)
+
+        # Create temporary file with client secrets
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
+            temp_file.write(google_secrets)
+            credentials_path = temp_file.name
+
+        logger.error(f"Created temporary credentials file: {credentials_path}")
+
+        # Create OAuth flow
         flow = Flow.from_client_secrets_file(
-            settings.GOOGLE_CREDENTIALS_PATH,
+            credentials_path,
             scopes=['https://www.googleapis.com/auth/calendar'],
             redirect_uri=settings.OAUTH2_REDIRECT_URI,
             state=user_id
         )
 
+        # Fetch the token
         flow.fetch_token(authorization_response=request.build_absolute_uri())
         credentials = flow.credentials
 
+        # Validate credentials
+        if not credentials or not credentials.valid:
+            logger.error("Invalid or expired credentials")
+            return HttpResponse("Failed to obtain valid credentials", status=500)
+
+        # Prepare credentials dictionary
         creds_dict = {
             'token': credentials.token,
             'refresh_token': credentials.refresh_token,
@@ -1005,17 +1050,42 @@ def oauth2callback(request):
             'scopes': list(credentials.scopes)
         }
 
+        # Store credentials
         user_profile.google_credentials = json.dumps(creds_dict)
         user_profile.save()
 
+        # Send SMS with success message
         send_sms(user_profile.phone_number,
-                 "Your Google Calendar is now connected! You can start creating events via SMS.")
+                 "Google Calendar successfully connected! 🎉\n\n"
+                 "How to use FollowUp:\n"
+                 "• Text 'schedule' to create a meeting\n"
+                 "• Text 'events' to view your schedule\n"
+                 "• Text 'help' for more commands")
 
+        # Clean up temporary file
+        try:
+            os.unlink(credentials_path)
+        except Exception as cleanup_error:
+            logger.error(f"Error cleaning up temporary credentials file: {cleanup_error}")
+
+        # Redirect or return success response
         return HttpResponse('Successfully connected! You can now use SMS to manage your calendar.')
+
     except Exception as e:
-        logger.error(f"OAuth callback error: {str(e)}")
+        # Comprehensive error logging
+        logger.error(f"Full OAuth callback error: {str(e)}")
         logger.error(traceback.format_exc())
-        return HttpResponse(f'Error in oauth2callback: {str(e)}')
+
+        # Attempt to send error SMS if possible
+        try:
+            if user_id:
+                user_profile = UserProfile.objects.get(id=user_id)
+                send_sms(user_profile.phone_number,
+                         "Google Calendar authentication failed. Please try again or contact support.")
+        except:
+            pass
+
+        return HttpResponse(f'Error in oauth2callback: {str(e)}', status=500)
 
 
 @csrf_exempt
