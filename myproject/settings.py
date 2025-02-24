@@ -25,6 +25,9 @@ from dotenv import load_dotenv
 import dj_database_url
 
 # Load environment variables
+from scheduler.models import UserProfile
+from scheduler.sms_sender import send_sms
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -116,84 +119,63 @@ APPEND_SLASH = False
 OAUTH2_REDIRECT_URI = 'https://checkout.chiresearchai.com/oauth2callback/'
 
 
-def authorize_google(request):
+def authorize_google(request, user_id):
+    """Handle Google OAuth authorization"""
     try:
         import os
         import logging
 
         logger = logging.getLogger(__name__)
 
-        # Log detailed information about paths and configuration
+        # Log all environment variables related to Google OAuth
+        logger.error(f"User ID: {user_id}")
         logger.error(f"BASE_DIR: {BASE_DIR}")
-        logger.error(f"OAUTH2_REDIRECT_URI: {OAUTH2_REDIRECT_URI}")
+        logger.error(f"GOOGLE_CLIENT_SECRETS_FILE: {GOOGLE_CLIENT_SECRETS_FILE}")
+        logger.error(f"GOOGLE_SECRETS env var: {os.environ.get('GOOGLE_SECRETS')}")
 
-        # Try multiple possible paths for credentials
-        possible_paths = [
-            os.path.join(BASE_DIR, 'config', 'credentials.json'),
-            os.path.join(BASE_DIR, 'client_secrets.json'),
-            os.path.join(BASE_DIR, 'secrets', 'credentials.json'),
-            settings.GOOGLE_CLIENT_SECRETS_FILE  # Use the path from settings
-        ]
+        # Validate client secrets file
+        if not GOOGLE_CLIENT_SECRETS_FILE:
+            logger.error("No client secrets file available")
+            return HttpResponse("Google OAuth configuration error", status=500)
 
-        credentials_path = None
-        for path in possible_paths:
-            logger.error(f"Checking path: {path}")
-            logger.error(f"File exists: {os.path.exists(path)}")
-            if os.path.exists(path):
-                credentials_path = path
-                break
-
-        if not credentials_path:
-            # Check environment variable
-            client_secrets_content = os.environ.get('GOOGLE_CLIENT_SECRETS')
-            if client_secrets_content:
-                import tempfile
-                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
-                    temp_file.write(client_secrets_content)
-                    credentials_path = temp_file.name
-                    logger.error(f"Using temporary credentials file: {credentials_path}")
-
-        if not credentials_path:
-            logger.error("No credentials file found")
-            return HttpResponse("No credentials file found.", status=500)
-
-        # Log the contents of the credentials file (be careful with sensitive info)
+        # Retrieve user profile
         try:
-            with open(credentials_path, 'r') as f:
-                content = f.read()
-                # Only log the first 200 characters to avoid exposing sensitive data
-                logger.error(f"Credentials file contents (first 200 chars): {content[:200]}")
-        except Exception as read_error:
-            logger.error(f"Error reading credentials file: {read_error}")
+            user_profile = UserProfile.objects.get(id=user_id)
+        except UserProfile.DoesNotExist:
+            logger.error(f"No user profile found for ID: {user_id}")
+            return HttpResponse(f"User profile not found for ID {user_id}", status=404)
 
         # Create OAuth flow
         flow = Flow.from_client_secrets_file(
-            credentials_path,
+            GOOGLE_CLIENT_SECRETS_FILE,
             scopes=['https://www.googleapis.com/auth/calendar'],
-            redirect_uri=OAUTH2_REDIRECT_URI
+            redirect_uri=settings.OAUTH2_REDIRECT_URI,
+            state=str(user_id)
         )
 
         # Generate authorization URL
         authorization_url, state = flow.authorization_url(
-            access_type='offline',  # Ensures we get a refresh token
-            prompt='consent'  # Forces user to grant permissions every time
+            access_type='offline',
+            prompt='consent'
         )
-
-        # Store state in session for CSRF protection
-        request.session['state'] = state
 
         logger.error(f"Authorization URL generated: {authorization_url}")
 
         return redirect(authorization_url)
 
-    except FileNotFoundError as fnf_error:
-        logger.error(f"Credentials file not found: {fnf_error}")
-        return HttpResponse("Credentials file not found.", status=500)
-
     except Exception as e:
-        # Log the full error details
+        # Comprehensive error logging
         logger.error(f"Authorization error: {e}", exc_info=True)
-        return HttpResponse(f"An error occurred: {str(e)}", status=500)
+
+        # Attempt to send error SMS if possible
+        try:
+            user_profile = UserProfile.objects.get(id=user_id)
+            send_sms(user_profile.phone_number,
+                     f"Authentication setup failed. Error: {str(e)}")
+        except:
+            pass
+
+        return HttpResponse(f"Authentication error: {e}", status=500)
 
 
 import os
