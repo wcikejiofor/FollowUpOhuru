@@ -727,11 +727,56 @@ def view_events(user_profile, date_reference, user_tz, response):
 def authorize_google(request, user_id):
     """Handle Google OAuth authorization"""
     try:
-        logger.debug(f"Starting Google OAuth authorization for user {user_id}")
+        import os
 
-        user_profile = UserProfile.objects.get(id=user_id)
-        logger.debug(f"User Profile found: {user_profile.phone_number}")
+        # Extensive logging for debugging
+        logger.error(f"Starting Google OAuth authorization for user {user_id}")
 
+        # Log environment variables and file paths
+        logger.error(f"BASE_DIR: {settings.BASE_DIR}")
+        logger.error(f"GOOGLE_CLIENT_SECRETS_FILE: {settings.GOOGLE_CLIENT_SECRETS_FILE}")
+
+        # Check if the file exists and is readable
+        if not settings.GOOGLE_CLIENT_SECRETS_FILE:
+            logger.error("No Google Client Secrets file path defined!")
+            return HttpResponse("No client secrets file configured", status=500)
+
+        # Additional file existence and permission check
+        if not os.path.exists(settings.GOOGLE_CLIENT_SECRETS_FILE):
+            logger.error(
+                f"Client secrets file does not exist at: {settings.GOOGLE_CLIENT_SECRETS_FILE}")
+
+            # Optional: Check environment variable contents
+            client_secrets_env = os.environ.get('GOOGLE_CLIENT_SECRETS')
+            if client_secrets_env:
+                logger.error("GOOGLE_CLIENT_SECRETS environment variable is set")
+                logger.error(f"First 200 chars of env var: {client_secrets_env[:200]}")
+            else:
+                logger.error("GOOGLE_CLIENT_SECRETS environment variable is NOT set")
+
+            return HttpResponse(
+                f"Client secrets file not found at {settings.GOOGLE_CLIENT_SECRETS_FILE}",
+                status=500)
+
+        # Try to read the file to verify its contents
+        try:
+            with open(settings.GOOGLE_CLIENT_SECRETS_FILE, 'r') as f:
+                file_contents = f.read()
+                logger.error(
+                    f"Client secrets file contents (first 200 chars): {file_contents[:200]}")
+        except Exception as read_error:
+            logger.error(f"Error reading client secrets file: {read_error}")
+            return HttpResponse(f"Error reading client secrets: {read_error}", status=500)
+
+        # Retrieve user profile
+        try:
+            user_profile = UserProfile.objects.get(id=user_id)
+            logger.debug(f"User Profile found: {user_profile.phone_number}")
+        except UserProfile.DoesNotExist:
+            logger.error(f"No user profile found for ID: {user_id}")
+            return HttpResponse(f"User profile not found for ID {user_id}", status=404)
+
+        # Create OAuth flow
         flow = Flow.from_client_secrets_file(
             settings.GOOGLE_CLIENT_SECRETS_FILE,
             scopes=['https://www.googleapis.com/auth/calendar'],
@@ -739,6 +784,7 @@ def authorize_google(request, user_id):
             state=str(user_id)
         )
 
+        # Generate authorization URL
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             prompt='consent'
@@ -747,9 +793,20 @@ def authorize_google(request, user_id):
         logger.debug(f"Authorization URL generated: {authorization_url}")
 
         return redirect(authorization_url)
+
     except Exception as e:
-        logger.error(f"Authorization error: {e}", exc_info=True)
-        return HttpResponse(f"Authentication error: {e}")
+        # Comprehensive error logging
+        logger.error(f"Full Authorization error: {e}", exc_info=True)
+
+        # Attempt to send error via SMS if possible
+        try:
+            user_profile = UserProfile.objects.get(id=user_id)
+            send_sms(user_profile.phone_number,
+                     f"Authentication setup failed. Please contact support.")
+        except:
+            pass
+
+        return HttpResponse(f"Authentication error: {e}", status=500)
 
 
 @csrf_exempt

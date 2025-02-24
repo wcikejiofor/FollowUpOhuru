@@ -136,6 +136,51 @@ def authorize_google(request):
         return HttpResponse(f"An error occurred: {str(e)}", status=500)
 
 
+import os
+import tempfile
+import json
+
+
+def get_google_client_secrets():
+    # Check environment variable first
+    client_secrets_content = os.environ.get('GOOGLE_CLIENT_SECRETS')
+
+    if client_secrets_content:
+        try:
+            # Validate JSON
+            json.loads(client_secrets_content)
+
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
+                temp_file.write(client_secrets_content)
+                return temp_file.name
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON in GOOGLE_CLIENT_SECRETS environment variable")
+
+    # Fallback paths
+    possible_paths = [
+        os.path.join(BASE_DIR, 'client_secrets.json'),
+        os.path.join(BASE_DIR, 'config', 'client_secrets.json'),
+        os.path.join(BASE_DIR, 'secrets', 'client_secrets.json'),
+        os.path.join(BASE_DIR, 'credentials', 'client_secrets.json')
+    ]
+
+    for path in possible_paths:
+        if os.path.exists(path):
+            logger.info(f"Found client secrets at {path}")
+            return path
+
+    logger.error("No client secrets file found")
+    return None
+
+
+# Set the client secrets file path
+GOOGLE_CLIENT_SECRETS_FILE = get_google_client_secrets()
+
+# Validate and log
+if not GOOGLE_CLIENT_SECRETS_FILE:
+    logger.error("CRITICAL: No Google Client Secrets file found!")
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
