@@ -25,15 +25,14 @@ from dotenv import load_dotenv
 import dj_database_url
 
 # Load environment variables
-
 from scheduler.sms_sender import send_sms
+from scheduler.models import UserProfile
 
 def get_user_model():
     from django.apps import apps
     return apps.get_model('scheduler', 'UserProfile')
 
 load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Use environment variables for all sensitive information
