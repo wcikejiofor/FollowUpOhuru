@@ -810,12 +810,36 @@ def authorize_google(request, user_id):
 
 
 @csrf_exempt
+@csrf_exempt
 def oauth2callback(request):
     """Handle Google OAuth callback"""
     try:
-        user_id = request.GET.get('state')
-        user_profile = UserProfile.objects.get(id=user_id)
+        import logging
+        import traceback
+        import json
 
+        logger = logging.getLogger(__name__)
+
+        # Log detailed debugging information
+        logger.error(f"Full request GET parameters: {dict(request.GET)}")
+        logger.error(f"BASE_DIR: {BASE_DIR}")
+        logger.error(f"GOOGLE_CLIENT_SECRETS_FILE: {settings.GOOGLE_CLIENT_SECRETS_FILE}")
+
+        # Extract user ID from state parameter
+        user_id = request.GET.get('state')
+
+        if not user_id:
+            logger.error("No user ID found in OAuth callback")
+            return HttpResponse("Invalid OAuth callback: Missing user ID", status=400)
+
+        # Retrieve user profile
+        try:
+            user_profile = UserProfile.objects.get(id=user_id)
+        except UserProfile.DoesNotExist:
+            logger.error(f"No user profile found for ID: {user_id}")
+            return HttpResponse(f"User profile not found for ID {user_id}", status=404)
+
+        # Construct flow with explicit parameters
         flow = Flow.from_client_secrets_file(
             settings.GOOGLE_CLIENT_SECRETS_FILE,
             scopes=['https://www.googleapis.com/auth/calendar'],
@@ -823,10 +847,16 @@ def oauth2callback(request):
             state=str(user_id)
         )
 
+        # Fetch the token
         flow.fetch_token(authorization_response=request.build_absolute_uri())
         credentials = flow.credentials
 
-        # Store credentials
+        # Validate credentials
+        if not credentials or not credentials.valid:
+            logger.error("Invalid or expired credentials")
+            return HttpResponse("Failed to obtain valid credentials", status=500)
+
+        # Prepare credentials dictionary
         creds_dict = {
             'token': credentials.token,
             'refresh_token': credentials.refresh_token,
@@ -836,10 +866,16 @@ def oauth2callback(request):
             'scopes': list(credentials.scopes)
         }
 
+        # Validate credentials dictionary
+        for key, value in creds_dict.items():
+            if value is None:
+                logger.warning(f"Missing credential key: {key}")
+
+        # Store credentials
         user_profile.google_credentials = json.dumps(creds_dict)
         user_profile.save()
 
-        # Send SMS with app usage instructions
+        # Send SMS with success message
         send_sms(user_profile.phone_number,
                  "Google Calendar successfully connected! 🎉\n\n"
                  "How to use FollowUp:\n"
@@ -847,13 +883,24 @@ def oauth2callback(request):
                  "• Text 'events' to view your schedule\n"
                  "• Text 'help' for more commands")
 
+        # Redirect or return success response
         return HttpResponse('Successfully connected! You can now use SMS to manage your calendar.')
 
     except Exception as e:
-        logger.error(f"OAuth callback error: {str(e)}")
+        # Comprehensive error logging
+        logger.error(f"Full OAuth callback error: {str(e)}")
         logger.error(traceback.format_exc())
-        return HttpResponse(f'Error in oauth2callback: {str(e)}')
 
+        # Attempt to send error SMS if possible
+        try:
+            if user_id:
+                user_profile = UserProfile.objects.get(id=user_id)
+                send_sms(user_profile.phone_number,
+                         "Google Calendar authentication failed. Please try again or contact support.")
+        except:
+            pass
+
+        return HttpResponse(f'Error in oauth2callback: {str(e)}', status=500)
 
 def ivr_menu(request):
     """Handle IVR menu for voice calls"""
