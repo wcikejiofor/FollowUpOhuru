@@ -9,24 +9,28 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
+# Standard library imports
 import os
+import json
+import tempfile
 from pathlib import Path
-from django.conf import settings
-from google_auth_oauthlib.flow import Flow
-from django.shortcuts import redirect
-from django.http import HttpResponse
-from googleapiclient.discovery import build
+
+# Third-party library imports
 import dj_database_url
 from dotenv import load_dotenv
 
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-import dj_database_url
+# Django-related imports
+from django.conf import settings
+from django.shortcuts import redirect
+from django.http import HttpResponse
+
+# Google-related imports
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+
 
 # Load environment variables
 from scheduler.sms_sender import send_sms
-from scheduler.models import UserProfile
 
 def get_user_model():
     from django.apps import apps
@@ -44,9 +48,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-import os
-import json
-import tempfile
+
 
 # Check if the Google client secrets are in an environment variable
 google_client_secrets = os.environ.get('GOOGLE_CLIENT_SECRETS')
@@ -143,8 +145,8 @@ def authorize_google(request, user_id):
 
         # Retrieve user profile
         try:
-            user_profile = UserProfile.objects.get(id=user_id)
-        except UserProfile.DoesNotExist:
+            user_profile = get_user_model().objects.get(id=user_id)
+        except get_user_model().DoesNotExist:
             logger.error(f"No user profile found for ID: {user_id}")
             return HttpResponse(f"User profile not found for ID {user_id}", status=404)
 
@@ -172,7 +174,7 @@ def authorize_google(request, user_id):
 
         # Attempt to send error SMS if possible
         try:
-            user_profile = UserProfile.objects.get(id=user_id)
+            user_profile = get_user_model().objects.get(id=user_id)
             send_sms(user_profile.phone_number,
                      f"Authentication setup failed. Error: {str(e)}")
         except:
@@ -181,9 +183,6 @@ def authorize_google(request, user_id):
         return HttpResponse(f"Authentication error: {e}", status=500)
 
 
-import os
-import tempfile
-import json
 
 
 def get_google_client_secrets():
@@ -283,7 +282,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'scheduler',
     'scheduler.apps.SchedulerConfig',
 ]
 
