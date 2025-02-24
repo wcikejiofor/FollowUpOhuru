@@ -1001,7 +1001,6 @@ def credentials_to_dict(credentials):
 def oauth2callback(request):
     """Handle Google OAuth callback"""
     try:
-<<<<<<< HEAD
         import os
         import logging
         import traceback
@@ -1028,12 +1027,8 @@ def oauth2callback(request):
         logger.error(f"Created temporary credentials file: {credentials_path}")
 
         # Extract user ID from state parameter
-=======
->>>>>>> parent of b399309 (settings.py change3)
         user_id = request.GET.get('state')
-        user_profile = UserProfile.objects.get(id=user_id)
 
-<<<<<<< HEAD
         if not user_id:
             logger.error("No user ID found in OAuth callback")
             return HttpResponse("Invalid OAuth callback: Missing user ID", status=400)
@@ -1046,18 +1041,18 @@ def oauth2callback(request):
             return HttpResponse(f"User profile not found for ID {user_id}", status=404)
 
         # Create OAuth flow
-=======
->>>>>>> parent of b399309 (settings.py change3)
         flow = Flow.from_client_secrets_file(
-            settings.GOOGLE_CREDENTIALS_PATH,
+            credentials_path,
             scopes=['https://www.googleapis.com/auth/calendar'],
             redirect_uri='https://checkout.chiresearchai.com/oauth2callback/',
             state=user_id
         )
 
+        # Fetch the token
         flow.fetch_token(authorization_response=request.build_absolute_uri())
         credentials = flow.credentials
 
+        # Prepare credentials dictionary
         creds_dict = {
             'token': credentials.token,
             'refresh_token': credentials.refresh_token,
@@ -1067,10 +1062,10 @@ def oauth2callback(request):
             'scopes': list(credentials.scopes)
         }
 
+        # Store credentials
         user_profile.google_credentials = json.dumps(creds_dict)
         user_profile.save()
 
-<<<<<<< HEAD
         # Clean up temporary file
         try:
             os.unlink(credentials_path)
@@ -1078,26 +1073,22 @@ def oauth2callback(request):
             logger.error(f"Error cleaning up temporary credentials file: {cleanup_error}")
 
         # Send SMS with success message
-=======
->>>>>>> parent of b399309 (settings.py change3)
         send_sms(user_profile.phone_number,
-                 "Your Google Calendar is now connected! You can start creating events via SMS.")
+                 "Google Calendar successfully connected! 🎉\n\n"
+                 "How to use FollowUp:\n"
+                 "• Text 'schedule' to create a meeting\n"
+                 "• Text 'events' to view your schedule\n"
+                 "• Text 'help' for more commands")
 
-<<<<<<< HEAD
         # Redirect or return success response
-=======
->>>>>>> parent of b399309 (settings.py change3)
         return HttpResponse('Successfully connected! You can now use SMS to manage your calendar.')
+
     except Exception as e:
+        # Comprehensive error logging
         logger.error(f"OAuth callback error: {str(e)}")
         logger.error(traceback.format_exc())
-<<<<<<< HEAD
 
         return HttpResponse(f'Error in oauth2callback: {str(e)}', status=500)
-=======
-        return HttpResponse(f'Error in oauth2callback: {str(e)}')
->>>>>>> parent of b399309 (settings.py change3)
-
 
 @csrf_exempt
 @require_POST
