@@ -1124,7 +1124,7 @@ def get_plan_name(plan_id):
     plan_mapping = {
         'price_1Qs3GsBMW3FJGGMOUtveta1W': 'Starter',
         'price_1Qs3JYBMW3FJGGMOOmKxi2K2': 'Pro',
-        'price_1QstKdBMW3FJGGMOpDUStTEU': 'Business',
+        'price_1Qta6UBMW3FJGGMOatv3YF4Z': 'Business',
     }
     return plan_mapping.get(plan_id, 'Unknown Plan')
 

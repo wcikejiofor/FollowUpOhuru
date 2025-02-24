@@ -42,7 +42,7 @@ class StripeSubscriptionManager:
             plan_prices = {
                 'starter': 'price_1Qs3GsBMW3FJGGMOUtveta1W',
                 'pro': 'price_1Qs3JYBMW3FJGGMOOmKxi2K2',
-                'business': 'price_1QstKdBMW3FJGGMOpDUStTEU'
+                'business': 'price_1Qta6UBMW3FJGGMOatv3YF4Z'
             }
 
             # Validate the plan
