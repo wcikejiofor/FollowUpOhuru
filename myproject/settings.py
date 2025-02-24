@@ -118,21 +118,81 @@ OAUTH2_REDIRECT_URI = f"{BASE_URL}/oauth2callback/"
 
 def authorize_google(request):
     try:
-        credentials_path = os.path.join(BASE_DIR, 'config', 'credentials.json')
+        import os
+        import logging
 
+        logger = logging.getLogger(__name__)
+
+        # Log detailed information about paths and configuration
+        logger.error(f"BASE_DIR: {BASE_DIR}")
+        logger.error(f"OAUTH2_REDIRECT_URI: {OAUTH2_REDIRECT_URI}")
+
+        # Try multiple possible paths for credentials
+        possible_paths = [
+            os.path.join(BASE_DIR, 'config', 'credentials.json'),
+            os.path.join(BASE_DIR, 'client_secrets.json'),
+            os.path.join(BASE_DIR, 'secrets', 'credentials.json'),
+            settings.GOOGLE_CLIENT_SECRETS_FILE  # Use the path from settings
+        ]
+
+        credentials_path = None
+        for path in possible_paths:
+            logger.error(f"Checking path: {path}")
+            logger.error(f"File exists: {os.path.exists(path)}")
+            if os.path.exists(path):
+                credentials_path = path
+                break
+
+        if not credentials_path:
+            # Check environment variable
+            client_secrets_content = os.environ.get('GOOGLE_CLIENT_SECRETS')
+            if client_secrets_content:
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
+                    temp_file.write(client_secrets_content)
+                    credentials_path = temp_file.name
+                    logger.error(f"Using temporary credentials file: {credentials_path}")
+
+        if not credentials_path:
+            logger.error("No credentials file found")
+            return HttpResponse("No credentials file found.", status=500)
+
+        # Log the contents of the credentials file (be careful with sensitive info)
+        try:
+            with open(credentials_path, 'r') as f:
+                content = f.read()
+                # Only log the first 200 characters to avoid exposing sensitive data
+                logger.error(f"Credentials file contents (first 200 chars): {content[:200]}")
+        except Exception as read_error:
+            logger.error(f"Error reading credentials file: {read_error}")
+
+        # Create OAuth flow
         flow = Flow.from_client_secrets_file(
             credentials_path,
             scopes=['https://www.googleapis.com/auth/calendar'],
             redirect_uri=OAUTH2_REDIRECT_URI
         )
 
-        authorization_url, state = flow.authorization_url()
+        # Generate authorization URL
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',  # Ensures we get a refresh token
+            prompt='consent'  # Forces user to grant permissions every time
+        )
+
+        # Store state in session for CSRF protection
         request.session['state'] = state
+
+        logger.error(f"Authorization URL generated: {authorization_url}")
+
         return redirect(authorization_url)
 
-    except FileNotFoundError:
+    except FileNotFoundError as fnf_error:
+        logger.error(f"Credentials file not found: {fnf_error}")
         return HttpResponse("Credentials file not found.", status=500)
+
     except Exception as e:
+        # Log the full error details
+        logger.error(f"Authorization error: {e}", exc_info=True)
         return HttpResponse(f"An error occurred: {str(e)}", status=500)
 
 
@@ -142,20 +202,38 @@ import json
 
 
 def get_google_client_secrets():
+    import os
+    import json
+    import tempfile
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     # Check environment variable first
     client_secrets_content = os.environ.get('GOOGLE_CLIENT_SECRETS')
 
     if client_secrets_content:
         try:
             # Validate JSON
-            json.loads(client_secrets_content)
+            json_data = json.loads(client_secrets_content)
+
+            # Additional validation for Google client secrets structure
+            if 'web' not in json_data:
+                logger.error("Invalid Google client secrets: 'web' key missing")
+                return None
 
             # Create a temporary file
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
-                temp_file.write(client_secrets_content)
+                json.dump(json_data, temp_file)
+                logger.info(f"Created temporary client secrets file: {temp_file.name}")
                 return temp_file.name
+
         except json.JSONDecodeError:
             logger.error("Invalid JSON in GOOGLE_CLIENT_SECRETS environment variable")
+            return None
+        except Exception as e:
+            logger.error(f"Error processing GOOGLE_CLIENT_SECRETS: {e}")
+            return None
 
     # Fallback paths
     possible_paths = [
@@ -166,11 +244,23 @@ def get_google_client_secrets():
     ]
 
     for path in possible_paths:
-        if os.path.exists(path):
-            logger.info(f"Found client secrets at {path}")
-            return path
+        try:
+            if os.path.exists(path):
+                # Validate JSON file contents
+                with open(path, 'r') as f:
+                    json_data = json.load(f)
+                    if 'web' not in json_data:
+                        logger.error(f"Invalid client secrets at {path}: 'web' key missing")
+                        continue
 
-    logger.error("No client secrets file found")
+                logger.info(f"Found valid client secrets at {path}")
+                return path
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON in {path}")
+        except Exception as e:
+            logger.error(f"Error reading {path}: {e}")
+
+    logger.error("No valid Google client secrets file found")
     return None
 
 
@@ -179,7 +269,7 @@ GOOGLE_CLIENT_SECRETS_FILE = get_google_client_secrets()
 
 # Validate and log
 if not GOOGLE_CLIENT_SECRETS_FILE:
-    logger.error("CRITICAL: No Google Client Secrets file found!")
+    logger.error("CRITICAL: No valid Google Client Secrets file found!")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
