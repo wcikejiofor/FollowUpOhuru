@@ -42,7 +42,7 @@ class StripeSubscriptionManager:
             plan_prices = {
                 'starter': 'price_1Qs3GsBMW3FJGGMOUtveta1W',
                 'pro': 'price_1Qs3JYBMW3FJGGMOOmKxi2K2',
-                'business': 'price_1Qta6UBMW3FJGGMOatv3YF4Z'
+                'business': 'price_1QwpCGBMW3FJGGMOk2wiHbDs'
             }
 
             # Validate the plan
@@ -89,7 +89,7 @@ class StripeSubscriptionManager:
                     'price': price_id,
                     'quantity': 1,
                 }],
-                success_url=f'https://chiresearchai.com/subscription/success?user_id={user_profile.id}',
+                success_url=f'https://www.chiresearchai.com/followup',
                 cancel_url=f'https://chiresearchai.com/subscription/cancel?user_id={user_profile.id}',
                 client_reference_id=str(user_profile.id),
                 metadata={
