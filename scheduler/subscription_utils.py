@@ -110,10 +110,10 @@ class SubscriptionManager:
             }
 
     @classmethod
+    @classmethod
     def check_meeting_eligibility(cls, user_profile):
         logger.debug(f"Checking meeting eligibility for profile ID: {user_profile.id}")
         logger.debug(f"Subscription Plan: {user_profile.subscription_plan}")
-        logger.debug(f"Stripe Customer ID: {user_profile.stripe_customer_id}")
 
         # Business and Pro plans get unlimited meetings
         if user_profile.subscription_plan.lower() in ['business', 'pro']:
@@ -122,7 +122,27 @@ class SubscriptionManager:
                 'message': 'Unlimited meetings allowed'
             }
 
-        # For free plan, allow a limited number of meetings
+        # Starter plan: 30 meetings per month
+        if user_profile.subscription_plan.lower() == 'starter':
+            one_month_ago = timezone.now() - timedelta(days=30)
+            monthly_meetings = Event.objects.filter(
+                user_profile=user_profile,
+                start_time__gte=one_month_ago
+            ).count()
+
+            # Allow 30 meetings per month for Starter plan
+            if monthly_meetings >= 30:
+                return {
+                    'eligible': False,
+                    'message': "You've reached the limit of 30 meetings for your Starter plan. "
+                               "Upgrade to Pro or Business for unlimited meetings."
+                }
+            return {
+                'eligible': True,
+                'message': f'Meetings this month: {monthly_meetings}/30'
+            }
+
+        # Free plan: 3 meetings per month
         if user_profile.subscription_plan.lower() == 'free':
             one_month_ago = timezone.now() - timedelta(days=30)
             monthly_meetings = Event.objects.filter(
@@ -130,15 +150,18 @@ class SubscriptionManager:
                 start_time__gte=one_month_ago
             ).count()
 
-            # Allow 3 free meetings per month
             if monthly_meetings >= 3:
                 return {
                     'eligible': False,
                     'message': "Upgrade to a paid plan to schedule more meetings. "
                                "You've reached the limit of 3 free meetings this month."
                 }
+            return {
+                'eligible': True,
+                'message': f'Meetings this month: {monthly_meetings}/3'
+            }
 
-        # If plan is not recognized, default to free
+        # If plan is not recognized, default to limiting meetings
         return {
             'eligible': False,
             'message': "Please verify your subscription plan."

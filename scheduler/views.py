@@ -166,11 +166,6 @@ def handle_transcription(request):
 @csrf_exempt
 @validate_twilio_request
 def sms_handler(request):
-    logger.error("SMS Handler Called")
-    logger.error(f"Request Method: {request.method}")
-    logger.error(f"Request Headers: {request.headers}")
-    logger.error(f"Request META: {request.META}")
-
     """Handle incoming SMS messages"""
     if request.method == 'POST':
         # Get original phone number from Twilio
@@ -413,7 +408,7 @@ def sms_handler(request):
             if not is_event_related:
                 try:
                     # Check if user has AI chat access based on subscription
-                    if user_profile.subscription_plan.lower() in ['business', 'pro']:
+                    if user_profile.subscription_plan.lower() in ['business', 'pro', 'starter']:
                         # Use OpenAI to generate a response
                         ai_response = client.chat.completions.create(
                             model="gpt-3.5-turbo",
@@ -448,10 +443,10 @@ def sms_handler(request):
                             response.message(ai_text)
 
                     else:
-                        # Upsell message for lower tier plans
+                        # Upsell message for free plan
                         response.message(
-                            "AI Chat is available on Pro and Business plans. "
-                            "Upgrade your plan to unlock unlimited AI assistance!"
+                            "AI Chat is available on Starter, Pro, and Business plans. "
+                            "Upgrade your plan to unlock AI assistance!"
                         )
 
                 except Exception as e:
