@@ -152,9 +152,12 @@ def authorize_google(request, user_id):
 
         # Create OAuth flow
         flow = Flow.from_client_secrets_file(
-            GOOGLE_CLIENT_SECRETS_FILE,
-            scopes=['https://www.googleapis.com/auth/calendar'],
-            redirect_uri=settings.OAUTH2_REDIRECT_URI,
+            settings.GOOGLE_CLIENT_SECRETS_FILE,
+            scopes=[
+                'https://www.googleapis.com/auth/calendar.events',
+                'https://www.googleapis.com/auth/calendar.readonly'
+            ],
+            redirect_uri=f"{settings.BASE_URL}/oauth2callback/",
             state=str(user_id)
         )
 

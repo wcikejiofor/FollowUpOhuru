@@ -774,11 +774,13 @@ def authorize_google(request, user_id):
         # Create OAuth flow
         flow = Flow.from_client_secrets_file(
             settings.GOOGLE_CLIENT_SECRETS_FILE,
-            scopes=['https://www.googleapis.com/auth/calendar'],
+            scopes=[
+                'https://www.googleapis.com/auth/calendar.events',
+                'https://www.googleapis.com/auth/calendar.readonly'
+            ],
             redirect_uri=f"{settings.BASE_URL}/oauth2callback/",
             state=str(user_id)
         )
-
         # Generate authorization URL
         authorization_url, state = flow.authorization_url(
             access_type='offline',
@@ -852,7 +854,10 @@ def oauth2callback(request):
             # Create OAuth flow
             flow = Flow.from_client_secrets_file(
                 credentials_path,
-                scopes=['https://www.googleapis.com/auth/calendar'],
+                scopes=[
+                    'https://www.googleapis.com/auth/calendar.events',
+                    'https://www.googleapis.com/auth/calendar.readonly'
+                ],
                 redirect_uri=settings.OAUTH2_REDIRECT_URI,
                 state=user_id
             )
@@ -1038,7 +1043,10 @@ def oauth2callback(request):
         # Create OAuth flow
         flow = Flow.from_client_secrets_file(
             credentials_path,
-            scopes=['https://www.googleapis.com/auth/calendar'],
+            scopes=[
+                'https://www.googleapis.com/auth/calendar.events',
+                'https://www.googleapis.com/auth/calendar.readonly'
+            ],
             redirect_uri='https://checkout.chiresearchai.com/oauth2callback/',
             state=user_id
         )

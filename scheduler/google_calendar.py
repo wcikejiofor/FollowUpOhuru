@@ -26,7 +26,11 @@ import traceback
 
 logger = logging.getLogger(__name__)
 
-SCOPES = ['https://www.googleapis.com/auth/calendar']
+# In google_calendar.py
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.readonly'
+]
 
 # Environment settings
 os.environ['GOOGLE_API_PYTHON_CLIENT_ENABLE_FILE_CACHE'] = '0'
