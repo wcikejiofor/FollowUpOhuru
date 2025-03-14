@@ -349,8 +349,12 @@ class EventManager:
             # Check slot availability and create event
             if self.is_slot_available(credentials, preferred_time, user_tz):
                 # Prepare event details
+                # Prepare event details
                 event_details['start_time'] = preferred_time.isoformat()
-                event_details['end_time'] = (preferred_time + timedelta(hours=1)).isoformat()
+
+                # Check if end time was specified, otherwise default to 1 hour
+                if 'end_time' not in event_details:
+                    event_details['end_time'] = (preferred_time + timedelta(hours=1)).isoformat()
 
                 # Default summary if not provided
                 if 'summary' not in event_details:
