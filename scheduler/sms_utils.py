@@ -365,11 +365,17 @@ class EventManager:
                 success = self.create_event(event_details, phone_number)
 
                 if success:
-                    return True, f"Event scheduled for {preferred_time.strftime('%A, %B %d at %I:%M %p')}"
+                    # Parse end time
+                    end_time = datetime.fromisoformat(event_details['end_time'])
+
+                    # Format both start and end times
+                    formatted_start = preferred_time.strftime('%I:%M %p').lstrip('0')
+                    formatted_end = end_time.strftime('%I:%M %p').lstrip('0')
+                    formatted_date = preferred_time.strftime('%A, %B %d')
+
+                    return True, f"Event scheduled for {formatted_date} from {formatted_start} to {formatted_end}"
                 else:
                     return False, "Failed to create the event. Please try again."
-            else:
-                return False, f"The requested time ({preferred_time.strftime('%A, %B %d at %I:%M %p')}) is not available. Please choose a different time."
 
         except UserProfile.DoesNotExist:
             logger.error(f"No user profile found for phone number {phone_number}")
