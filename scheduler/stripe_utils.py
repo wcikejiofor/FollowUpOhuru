@@ -173,12 +173,14 @@ class StripeSubscriptionManager:
             # Generate authentication link
             auth_link = f"{settings.BASE_URL}/authorize/{user_profile.id}/"
 
-            # Send welcome message with authentication link immediately
             StripeSubscriptionManager._send_sms(
                 user_profile.phone_number,
                 f"🎉 Welcome to FollowUp! Your {plan.capitalize()} plan is now active. "
-                f"To start using the service, please authenticate your Google Calendar. "
-                f"Click this link to connect: {auth_link}"
+                "To get started, connect your Google Calendar securely. "
+                "You may see a Google warning since we're still in beta—totally normal and safe. "
+                "We never store or share your calendar info. "
+                "Just click 'Advanced' → 'Continue' if prompted. "
+                f"Connect here: {auth_link}"
             )
 
             # Send additional onboarding messages
