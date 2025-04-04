@@ -48,7 +48,8 @@ def parse_event_details(incoming_msg, phone_number):
             {{
                 "action": "schedule" or "cancel",
                 "event": {{
-                    "summary": "Meeting with [person/details]",
+                    "summary": "EXACT NAME OF THE APPOINTMENT/MEETING",
+                    "location": "FULL ADDRESS OR LOCATION IF PROVIDED",
                     "start_time": "YYYY-MM-DD HH:MM:SS",
                     "duration_minutes": 60
                 }}
@@ -56,6 +57,8 @@ def parse_event_details(incoming_msg, phone_number):
 
             RULES:
             - Use 24-hour time format (00-23)
+            - IMPORTANT: Capture the EXACT appointment name and location from the message
+            - If an address or location is provided, include it in the location field
             - If "tomorrow" is mentioned, use tomorrow's date
             - If a specific time is mentioned, use it
             - If no specific time is mentioned, don't include a start_time

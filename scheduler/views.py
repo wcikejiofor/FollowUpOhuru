@@ -261,14 +261,12 @@ def sms_handler(request):
             if incoming_msg.startswith('signup'):
                 if 'starter' in incoming_msg:
                     return handle_starter_signup(user_profile, response)
-                elif 'pro' in incoming_msg:
-                    return handle_pro_signup(user_profile, response)
-                elif 'business' in incoming_msg:
-                    return handle_business_signup(user_profile, response)
-                elif 'trial' in incoming_msg:
-                    # Start free trial
-                    trial_result = SubscriptionManager.start_free_trial(user_profile)
-                    response.message(trial_result['message'])
+                else:
+                    # Only offer Starter plan
+                    response.message(
+                        "Only the Starter Plan ($5/month) is currently available.\n"
+                        "Text 'signup starter' to get started."
+                    )
                     return HttpResponse(str(response), content_type='application/xml')
 
             # Show plan details
@@ -400,7 +398,7 @@ def sms_handler(request):
                     "• Modify: 'Move my 3 PM meeting to 4 PM'\n"
                     "• Cancel: 'Cancel my 3 PM meeting'\n"
                     "• AI Chat: Just send a message and I'll respond!\n"
-                    "• Plans: 'my plan', 'signup starter', 'signup pro', 'signup business'\n\n"
+                    "• Plans: 'my plan', 'signup starter'\n\n"
                     "Need more help? Just ask!"
                 )
 
@@ -408,7 +406,7 @@ def sms_handler(request):
             if not is_event_related:
                 try:
                     # Check if user has AI chat access based on subscription
-                    if user_profile.subscription_plan.lower() in ['business', 'pro', 'starter']:
+                    if user_profile.subscription_plan.lower() in ['starter']:
                         # Use OpenAI to generate a response
                         ai_response = client.chat.completions.create(
                             model="gpt-3.5-turbo",
@@ -445,8 +443,8 @@ def sms_handler(request):
                     else:
                         # Upsell message for free plan
                         response.message(
-                            "AI Chat is available on Starter, Pro, and Business plans. "
-                            "Upgrade your plan to unlock AI assistance!"
+                            "AI Chat is available on the Starter Plan. "
+                            "Text 'signup starter' to unlock AI assistance!"
                         )
 
                 except Exception as e:
@@ -466,7 +464,7 @@ def sms_handler(request):
                                  "• Modify: 'Move my 3 PM meeting to 4 PM'\n"
                                  "• Cancel: 'Cancel my 3 PM meeting'\n"
                                  "• AI Chat: Just send a message and I'll respond!\n"
-                                 "• Plans: 'my plan', 'signup starter', 'signup pro', 'signup business'\n\n"
+                                 "• Plans: 'my plan', 'signup starter'\n\n"
                                  "Need more help? Just ask!"
             )
 
@@ -474,31 +472,19 @@ def sms_handler(request):
 
     return HttpResponse("Method not allowed", status=405)
 
-
 @csrf_exempt
 def no_plan_welcome(response):
     """Welcome message for users without an active subscription plan"""
     response.message(
-        "Welcome to FollowUp! This app helps you manage your calendar using simple text messages. "
-        "Choose a plan to get started:"
+        "Welcome to FollowUp! This app helps you manage your calendar using simple text messages."
     )
     response.message(
         "Starter Plan: $5/month\n"
-        "✅ 30 scheduled meetings/month\n"
-        "✅ Basic SMS scheduling\n"
-        "✅ 7-day free trial\n\n"
-        "Pro Plan: $10/month\n"
-        "✅ Unlimited scheduled meetings\n"
-        "✅ Faster processing\n"
-        "✅ Priority SMS\n"
-        "✅ 7-day free trial\n\n"
-        "Business Plan: $20/month\n"
-        "✅ Unlimited meetings\n"
-        "✅ Assistant Mode\n"
-        "✅ Priority scheduling\n"
-        "✅ Custom reminders\n"
-        "✅ 7-day free trial\n\n"
-        "Text 'signup starter', 'signup pro', or 'signup business' to continue."
+        "• 30 meetings/month\n"
+        "• SMS-based scheduling\n"
+        "• 7-day free trial\n\n"
+        "Text 'signup starter' to get started."
+
     )
     return HttpResponse(str(response), content_type='application/xml')
 
