@@ -892,9 +892,9 @@ def oauth2callback(request):
             send_sms(user_profile.phone_number,
                      "Google Calendar successfully connected! 🎉\n\n"
                      "How to use FollowUp:\n"
-                     "• Text 'schedule' to create a meeting\n"
-                     "• Text 'events' to view your schedule\n"
-                     "• Text 'help' for more commands")
+                     "• Text 'schedule' to create an event\n"
+                     "• Text 'cancel' to remove an event\n"
+                     "• Just send a message to use AI chat")
 
             # Redirect or return success response
             return HttpResponse(
