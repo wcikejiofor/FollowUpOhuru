@@ -493,18 +493,35 @@ def no_plan_welcome(response):
 def handle_starter_signup(user_profile, response):
     """Handle Starter plan signup"""
     try:
-        # Upgrade to Starter plan
-        upgrade_result = SubscriptionManager.upgrade_subscription(
+        # Generate Stripe Checkout URL
+        checkout_url = StripeSubscriptionManager.create_subscription_checkout(
             user_profile,
-            SubscriptionPlan.STARTER
+            'starter'
         )
 
-        response.message(
-            f"Welcome to the Starter Plan! "
-            f"✅ 30 meetings/month\n"
-            f"✅ Basic SMS scheduling\n"
-            f"Monthly cost: ${upgrade_result['price']}"
-        )
+        if checkout_url:
+            # Shorten the checkout URL
+            from .url_shortener import URLShortener
+            short_checkout_url = URLShortener.generate_short_link(checkout_url)
+
+            logger.debug(f"Shortened checkout URL: {short_checkout_url}")
+
+            # Send shortened checkout URL via SMS
+            StripeSubscriptionManager.send_checkout_link_via_sms(
+                user_profile.phone_number,
+                short_checkout_url
+            )
+
+            response.message(
+                "Checkout link sent via SMS! "
+                "Complete your Starter Plan subscription:\n"
+                "✅ 30 meetings/month\n"
+                "✅ Basic SMS scheduling\n"
+                "Monthly cost: $5"
+            )
+        else:
+            response.message("Error generating checkout link. Please try again.")
+
         return HttpResponse(str(response), content_type='application/xml')
     except Exception as e:
         logger.error(f"Starter plan signup error: {e}")
