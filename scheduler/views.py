@@ -1212,8 +1212,13 @@ def handle_payment_succeeded(event):
 
         # Send SMS
         message = (
-            f"Thank you for your payment! To complete setup, please authenticate your Google Calendar. "
-            f"Click this link: {auth_link}"
+            f"Thank you for your payment! To complete setup, please authenticate your Google "
+            f"Calendar. "
+            "To get started, connect your Google Calendar securely. "
+            "You may see a Google warning since we're still in beta—totally normal and safe. "
+            "We never store or share your calendar info. "
+            "Just click 'Advanced' → 'Continue' if prompted. "
+            f"Connect here: {auth_link}"
         )
         send_sms(user_phone_number, message)
 
