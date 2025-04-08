@@ -480,9 +480,9 @@ def no_plan_welcome(response):
     )
     response.message(
         "Starter Plan: $5/month\n"
-        "• 30 meetings/month\n"
+        "• Unlimited meetings/month\n"
         "• SMS-based scheduling\n"
-        "• 7-day free trial\n\n"
+        "• 7-day free trial if you use the Coupon CODE\n\n"
         "Text 'signup starter' to get started."
 
     )
