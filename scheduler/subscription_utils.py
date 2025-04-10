@@ -163,6 +163,6 @@ class SubscriptionManager:
 
         # If plan is not recognized, default to limiting meetings
         return {
-            'eligible': False,
-            'message': "Please verify your subscription plan."
+            'eligible': True,
+            'message': 'Temporary access allowed'
         }
