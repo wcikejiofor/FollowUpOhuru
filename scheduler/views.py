@@ -193,19 +193,26 @@ def sms_handler(request):
                 formatted_phone_number = original_phone_number
 
             # Find or Create User Profile with Zero-Friction Approach
-            user_profile, created = UserProfile.objects.get_or_create(
-                phone_number=formatted_phone_number,
-                defaults={
-                    'subscription_plan': SubscriptionPlan.STARTER,
-                    'subscription_start_date': timezone.now(),
-                    'trial_start_date': timezone.now(),
-                    'is_guest_mode': True,
-                    'setup_stage': 'new'
-                }
-            )
+            try:
+                # First, try to get the existing user profile
+                user_profile = UserProfile.objects.get(phone_number=formatted_phone_number)
+            except UserProfile.DoesNotExist:
+                # If the user doesn't exist, create a new profile
+                user_profile = UserProfile.objects.create(
+                    phone_number=formatted_phone_number,
+                    subscription_plan=SubscriptionPlan.STARTER,
+                    subscription_start_date=timezone.now(),
+                    trial_start_date=timezone.now()
+                )
 
-            # First-time user welcome
-            if created:
+                # Conditionally set guest mode if the field exists
+                if hasattr(user_profile, 'is_guest_mode'):
+                    user_profile.is_guest_mode = True
+                if hasattr(user_profile, 'setup_stage'):
+                    user_profile.setup_stage = 'new'
+                user_profile.save()
+
+                # First-time user welcome
                 response.message(
                     "Welcome to FollowUp! 🚀\n\n"
                     "You can start scheduling immediately:\n"
