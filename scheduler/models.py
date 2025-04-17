@@ -3,7 +3,7 @@ from django.utils import timezone
 from datetime import timedelta
 import pytz
 import json
-import timedelta
+from datetime import timedelta
 
 class SubscriptionPlan(models.TextChoices):
     FREE = 'FREE', 'Free Plan'
