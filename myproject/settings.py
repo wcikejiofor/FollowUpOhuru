@@ -68,7 +68,13 @@ else:
 
 # Then right after your ALLOWED_HOSTS definition
 # Near the top of your settings.py
-ALLOWED_HOSTS = ['*']  # Let our middleware handle the host checking
+ALLOWED_HOSTS = [
+    'followupohuru.onrender.com',
+    'checkout.chiresearchai.com',
+    'localhost',
+    '127.0.0.1',
+    '*'  # Be cautious with this in production
+]
 
 # Add these after your ALLOWED_HOSTS setting
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -80,12 +86,11 @@ logger.error(f"Current ALLOWED_HOSTS: {ALLOWED_HOSTS}")  # Using error level to 
 
 # Update CSRF_TRUSTED_ORIGINS to include your new domain
 CSRF_TRUSTED_ORIGINS = [
-    'https://b54f-2600-4040-4651-e600-ad65-4f90-1b03-b82d.ngrok-free.app',
-    'http://localhost:8000',
+    'https://followupohuru.onrender.com',
     'https://checkout.chiresearchai.com',
-    'https://followupohuru.onrender.com'
+    'http://localhost:8000',
+    'https://localhost:8000'
 ]
-
 # Twilio Settings
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
