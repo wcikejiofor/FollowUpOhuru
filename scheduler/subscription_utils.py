@@ -110,13 +110,14 @@ class SubscriptionManager:
             }
 
     @classmethod
-    @classmethod
     def check_meeting_eligibility(cls, user_profile):
         logger.debug(f"Checking meeting eligibility for profile ID: {user_profile.id}")
         logger.debug(f"Subscription Plan: {user_profile.subscription_plan}")
+        logger.debug(f"Guest Mode: {user_profile.is_guest_mode}")
 
-        # Business and Pro plans get unlimited meetings
-        if user_profile.subscription_plan.lower() in ['business', 'pro']:
+        # Guest mode or Business/Pro plans get unlimited meetings
+        if user_profile.is_guest_mode or user_profile.subscription_plan.lower() in ['business',
+                                                                                    'pro']:
             return {
                 'eligible': True,
                 'message': 'Unlimited meetings allowed'

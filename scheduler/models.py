@@ -3,14 +3,13 @@ from django.utils import timezone
 from datetime import timedelta
 import pytz
 import json
-
+import timedelta
 
 class SubscriptionPlan(models.TextChoices):
-    FREE = 'free', 'Free Plan'
-    STARTER = 'starter', 'Starter Plan'
-    PRO = 'pro', 'Pro Plan'
-    BUSINESS = 'business', 'Business Plan'
-
+    FREE = 'FREE', 'Free Plan'
+    STARTER = 'STARTER', 'Starter Plan'
+    PRO = 'PRO', 'Pro Plan'
+    BUSINESS = 'BUSINESS', 'Business Plan'
 
 class UserProfile(models.Model):
     phone_number = models.CharField(max_length=50, null=True, blank=True)
@@ -20,7 +19,6 @@ class UserProfile(models.Model):
         max_length=20,
         choices=SubscriptionPlan.choices,
         default=SubscriptionPlan.FREE,
-
     )
     subscription_start_date = models.DateTimeField(null=True, blank=True)
     trial_start_date = models.DateTimeField(null=True, blank=True)
@@ -29,6 +27,10 @@ class UserProfile(models.Model):
 
     # Google credentials
     google_credentials = models.TextField(null=True, blank=True)
+
+    # Guest mode field
+    is_guest_mode = models.BooleanField(default=True)
+    setup_stage = models.CharField(max_length=20, null=True, blank=True)
 
     def is_trial_active(self):
         """Check if the 7-day free trial is still active"""
@@ -47,9 +49,9 @@ class UserProfile(models.Model):
 
     def can_schedule_meeting(self):
         """Check if user can schedule a meeting based on their plan"""
-        if self.subscription_plan == SubscriptionPlan.STARTER:
-            # Starter plan: 30 meetings per month
-            return self.meetings_this_month < 30
+        # Guest mode or Starter plan gets full access
+        if self.is_guest_mode or self.subscription_plan == SubscriptionPlan.STARTER:
+            return True
 
         if self.subscription_plan in [SubscriptionPlan.PRO, SubscriptionPlan.BUSINESS]:
             # Pro and Business plans: Unlimited meetings
@@ -59,15 +61,24 @@ class UserProfile(models.Model):
 
     def increment_meetings(self):
         """Increment the number of meetings for the current month"""
-        if self.subscription_plan == SubscriptionPlan.STARTER:
-            # Reset meetings count at the start of each month
-            if (not self.subscription_start_date or
-                    timezone.now().month != self.subscription_start_date.month):
-                self.meetings_this_month = 1
-                self.subscription_start_date = timezone.now()
-            else:
-                self.meetings_this_month += 1
-            self.save()
+        # Skip incrementing for guest mode or if it's a plan with unlimited meetings
+        if (self.is_guest_mode or
+            self.subscription_plan in [SubscriptionPlan.PRO, SubscriptionPlan.BUSINESS]):
+            return
+
+        # Reset meetings count at the start of each month
+        if (not self.subscription_start_date or
+                timezone.now().month != self.subscription_start_date.month):
+            self.meetings_this_month = 1
+            self.subscription_start_date = timezone.now()
+        else:
+            self.meetings_this_month += 1
+        self.save()
+
+    def upgrade_to_full_account(self):
+        """Transition from guest mode to full account"""
+        self.is_guest_mode = False
+        self.save()
 
     def start_trial(self):
         """Start the 7-day free trial"""
@@ -104,7 +115,7 @@ class UserProfile(models.Model):
                 'description': 'For freelancers and small business owners'
             },
             SubscriptionPlan.PRO: {
-                'name': '',
+                'name': 'Pro Plan',
                 'max_meetings': float('inf'),  # Unlimited
                 'sms_scheduling': True,
                 'priority': True,

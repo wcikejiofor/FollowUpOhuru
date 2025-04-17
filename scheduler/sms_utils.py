@@ -188,6 +188,21 @@ class EventManager:
         self.sms_scheduler = SMSScheduler(user_profile)
         logger.debug(f"EventManager methods: {dir(self)}")
 
+    def create_local_event(self, event_details, phone_number):
+        """Create an event locally without requiring Google Calendar"""
+        try:
+            Event.objects.create(
+                user_profile=self.user_profile,
+                summary=event_details.get('summary', 'Untitled Event'),
+                start_time=event_details.get('start_time'),
+                end_time=event_details.get('end_time'),
+                needs_sync=True  # Ready to sync when Google Calendar connected
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Local event creation error: {e}")
+            return False
+
     def cancel_event(self, event_details, phone_number):
         try:
             credentials = self._get_pro_credentials()

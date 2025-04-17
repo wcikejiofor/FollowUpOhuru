@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 import re
 import dateparser
+import phonenumbers
 import pytz
 import stripe
 
@@ -40,6 +41,7 @@ from openai import OpenAI
 from .models import UserProfile, GoogleCredentials, Event, SubscriptionPlan
 from .sms_utils import SMSScheduler, EventManager
 from .subscription_utils import SubscriptionManager
+from .url_shortener import URLShortener
 from .utils import parse_event_details, parse_modification_details, get_timezone_from_phone, \
     parse_preferred_time
 
@@ -58,22 +60,15 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Only for development
 
 @csrf_exempt
 def validate_twilio_request(f):
-    @wraps(f)
+    """Decorator to validate Twilio requests"""
     def decorated_function(request, *args, **kwargs):
-        # More permissive validation
+        # More permissive validation for debug
         if settings.DEBUG:
             logger.warning("Debug mode: Bypassing Twilio validation")
             return f(request, *args, **kwargs)
 
         try:
             validator = RequestValidator(settings.TWILIO_AUTH_TOKEN)
-
-            # Detailed logging
-            logger.debug(f"Request URL: {request.build_absolute_uri()}")
-            logger.debug(
-                f"Twilio Signature: {request.META.get('HTTP_X_TWILIO_SIGNATURE', 'No signature')}")
-            logger.debug(f"POST Data: {dict(request.POST)}")
-
             request_valid = validator.validate(
                 request.build_absolute_uri(),
                 request.POST,
@@ -91,7 +86,6 @@ def validate_twilio_request(f):
             return HttpResponseForbidden(f"Validation error: {str(e)}")
 
     return decorated_function
-
 
 @csrf_exempt
 @validate_twilio_request
@@ -138,17 +132,28 @@ def handle_transcription(request):
 
         logger.debug(f"Transcription received for {phone_number}: {transcription}")
 
-        user_profile = UserProfile.objects.get(phone_number=phone_number)
+        # Find or create user profile
+        user_profile, _ = UserProfile.objects.get_or_create(
+            phone_number=phone_number,
+            defaults={
+                'subscription_plan': SubscriptionPlan.STARTER,
+                'subscription_start_date': timezone.now(),
+                'is_guest_mode': True
+            }
+        )
+
+        # Check if user has Google Calendar credentials
         if not user_profile.google_credentials:
-            send_sms(phone_number, "Please authenticate first by texting this number.")
+            send_sms(phone_number, "Please connect your Google Calendar first by texting 'connect'.")
             return HttpResponse()
 
+        # Parse event details from transcription
         event_details = parse_event_details(transcription, phone_number)
 
         if event_details and len(event_details) > 0:
             event_manager = EventManager(user_profile)
-            if event_manager.create_event(event_details, phone_number):
-                return HttpResponse("Event created successfully")
+            if event_manager.create_local_event(event_details, phone_number):
+                send_sms(phone_number, f"Event created: {event_details.get('summary', 'Meeting')}")
             else:
                 send_sms(phone_number, "Error creating event. Please try again.")
         else:
@@ -166,196 +171,106 @@ def handle_transcription(request):
 @csrf_exempt
 @validate_twilio_request
 def sms_handler(request):
-    """Handle incoming SMS messages"""
+    """
+    Zero-Step Onboarding SMS Handler
+    Handles all incoming SMS interactions with minimal friction
+    """
     if request.method == 'POST':
-        # Get original phone number from Twilio
-        original_phone_number = request.POST.get('From', '')
-        incoming_msg = request.POST.get('Body', '').lower().strip()
-        response = MessagingResponse()
-
-        # Keywords that indicate an event-related message
-        event_keywords = [
-            'schedule', 'appointment', 'meeting', 'cancel', 'reschedule',
-            'move', 'change', 'modify', 'book', 'create event',
-            'delete event', 'update event'
-        ]
-
-        # Check if message contains any event-related keywords
-        is_event_related = any(keyword in incoming_msg for keyword in event_keywords)
-
         try:
-            # Validate and format phone number
+            # Standardize phone number
+            original_phone_number = request.POST.get('From', '')
+            incoming_msg = request.POST.get('Body', '').lower().strip()
+            response = MessagingResponse()
+
+            # Parse and validate phone number
             try:
-                import phonenumbers
-                # Parse the phone number
                 parsed_number = phonenumbers.parse(original_phone_number, None)
-
-                # Validate the phone number
-                if not phonenumbers.is_valid_number(parsed_number):
-                    logger.error(f"Invalid phone number: {original_phone_number}")
-                    response.message(
-                        "Sorry, there was an issue with your phone number. Please contact support.")
-                    return HttpResponse(str(response), content_type='application/xml')
-
-                # Format to E.164 standard (international format)
                 formatted_phone_number = phonenumbers.format_number(
                     parsed_number,
                     phonenumbers.PhoneNumberFormat.E164
                 )
-            except Exception as e:
-                logger.error(f"Phone number parsing error: {e}")
-                # Fallback to original number if parsing fails
+            except Exception:
                 formatted_phone_number = original_phone_number
 
-            # Define plan priority
-            plan_priority = {
-                'business': 4,
-                'pro': 3,
-                'starter': 2,
-                'free': 1
-            }
+            # Find or Create User Profile with Zero-Friction Approach
+            user_profile, created = UserProfile.objects.get_or_create(
+                phone_number=formatted_phone_number,
+                defaults={
+                    'subscription_plan': SubscriptionPlan.STARTER,
+                    'subscription_start_date': timezone.now(),
+                    'trial_start_date': timezone.now(),
+                    'is_guest_mode': True,
+                    'setup_stage': 'new'
+                }
+            )
 
-            # Find existing profiles for this phone number
-            existing_profiles = UserProfile.objects.filter(phone_number=formatted_phone_number)
-
-            # If multiple profiles exist
-            if existing_profiles.count() > 1:
-                # Sort profiles by plan priority and creation date
-                sorted_profiles = sorted(
-                    existing_profiles,
-                    key=lambda p: (
-                        plan_priority.get(p.subscription_plan.lower(), 0),
-                        p.id  # Use ID as a secondary sort to keep most recent
-                    ),
-                    reverse=True
+            # First-time user welcome
+            if created:
+                response.message(
+                    "Welcome to FollowUp! 🚀\n\n"
+                    "You can start scheduling immediately:\n"
+                    "• 'Schedule meeting with John at 3pm'\n"
+                    "• 'Book call with Sarah tomorrow'\n\n"
+                    "Pro Tip: Text 'connect' to sync with Google Calendar!"
                 )
+                return HttpResponse(str(response), content_type='application/xml')
 
-                # Keep the highest priority profile (first in the sorted list)
-                user_profile = sorted_profiles[0]
-
-                # Delete other profiles
-                for profile in sorted_profiles[1:]:
-                    logger.warning(f"Deleting duplicate profile {profile.id}")
-                    profile.delete()
-
-                logger.info(
-                    f"Multiple profiles found for {formatted_phone_number}. "
-                    f"Kept profile ID: {user_profile.id} with {user_profile.subscription_plan} plan"
-                )
-
-            # If only one profile exists, use it
-            elif existing_profiles.count() == 1:
-                user_profile = existing_profiles.first()
-
-            # If no profile exists, create a new one
-            else:
-                user_profile = UserProfile.objects.create(
-                    phone_number=formatted_phone_number,
-                    subscription_plan=SubscriptionPlan.FREE,
-                    subscription_start_date=timezone.now()
-                )
-
-            logger.debug(f"Processing message: '{incoming_msg}' from {formatted_phone_number}")
-
-            # Handle subscription commands
-            if incoming_msg.startswith('signup'):
-                if 'starter' in incoming_msg:
-                    return handle_starter_signup(user_profile, response)
-                else:
-                    # Only offer Starter plan
-                    response.message(
-                        "Only the Starter Plan ($5/month) is currently available.\n"
-                        "Text 'signup starter' to get started."
-                    )
-                    return HttpResponse(str(response), content_type='application/xml')
-
-            # Show plan details
-            if incoming_msg in ['plan', 'subscription', 'my plan']:
-                return show_plan_details(user_profile, response)
-
-            # Check if user has no active plan
-            if user_profile.subscription_plan == SubscriptionPlan.FREE and not user_profile.is_trial_active():
-                return no_plan_welcome(response)
-
-            # Check meeting eligibility before scheduling
+            # Check meeting eligibility
             meeting_eligibility = SubscriptionManager.check_meeting_eligibility(user_profile)
             if not meeting_eligibility['eligible']:
                 response.message(meeting_eligibility['message'])
                 return HttpResponse(str(response), content_type='application/xml')
 
+            # Event Scheduling Keywords
+            event_keywords = [
+                'schedule', 'book', 'meeting', 'call', 'cancel', 'reschedule',
+                'modify', 'move', 'create event', 'delete event', 'update event'
+            ]
+            is_event_related = any(keyword in incoming_msg for keyword in event_keywords)
+
             event_manager = EventManager(user_profile)
-            logger.debug("Initialized EventManager")
 
-            # Smart Scheduling System
-            if 'schedule' in incoming_msg or 'appointment' in incoming_msg or 'meeting' in incoming_msg or 'cancel' in incoming_msg:
-                action, event_details = parse_event_details(incoming_msg, formatted_phone_number)
-                if event_details:
-                    if action == 'schedule':
-                        preferred_time_str = event_details.get('start_time')
-                        success, message = event_manager.schedule_smart_event(event_details,
-                                                                              preferred_time_str,
-                                                                              formatted_phone_number)
-                    elif action == 'cancel':
-                        success, message = event_manager.cancel_event(event_details,
-                                                                      formatted_phone_number)
-                    response.message(message)
-                    if not success and "Reply with the number" in message:
-                        request.session['pending_event'] = event_details
-                        request.session['suggested_slots'] = message
-                else:
-                    response.message(
-                        "I couldn't understand those details. Please try again with a clearer request.")
-
-            elif 'pending_event' in request.session:
-                event_details = request.session['pending_event']
-                suggested_slots = request.session.get('suggested_slots', '')
-
-                if incoming_msg.isdigit() and 1 <= int(incoming_msg) <= 5:
-                    # User selected one of the suggested slots
-                    slot_index = int(incoming_msg) - 1
-                    slots = [slot for slot in suggested_slots.split('\n') if
-                             slot.startswith(f"{slot_index + 1}.")]
-                    if slots:
-                        selected_slot = slots[0].split('. ')[1]
-                        success, message = event_manager.schedule_smart_event(event_details,
-                                                                              selected_slot,
-                                                                              formatted_phone_number)
-                        response.message(message)
-                        if success:
-                            del request.session['pending_event']
-                            del request.session['suggested_slots']
-                else:
-                    # User provided a custom time
-                    success, message = event_manager.schedule_smart_event(event_details,
-                                                                          incoming_msg,
-                                                                          formatted_phone_number)
-                    response.message(message)
-                    if success:
-                        del request.session['pending_event']
-                        del request.session['suggested_slots']
-
-            # Event Modification
-            elif ('move' in incoming_msg or 'change' in incoming_msg or
-                  'reschedule' in incoming_msg or 'modify' in incoming_msg or
-                  'from' in incoming_msg and 'to' in incoming_msg):
-
-                modification_details = parse_modification_details(incoming_msg,
+            # Event Handling
+            if is_event_related:
+                # Smart Event Handling (Scheduling, Modification, Cancellation)
+                if 'cancel' in incoming_msg:
+                    action, event_details = parse_event_details(incoming_msg,
+                                                                formatted_phone_number)
+                    success, message = event_manager.cancel_event(event_details,
                                                                   formatted_phone_number)
-                if modification_details:
-                    success = event_manager.modify_event(modification_details,
-                                                         formatted_phone_number)
-                    if not success:
+                    response.message(message)
+                elif 'move' in incoming_msg or 'reschedule' in incoming_msg:
+                    modification_details = parse_modification_details(incoming_msg,
+                                                                      formatted_phone_number)
+                    if modification_details:
+                        success = event_manager.modify_event(modification_details,
+                                                             formatted_phone_number)
+                        if not success:
+                            response.message(
+                                "I couldn't find that meeting. Please check the time and try again. "
+                                "For example: 'Move my 3 PM meeting to 4 PM'"
+                            )
+                    else:
                         response.message(
-                            "I couldn't find that meeting. Please check the time and try again. "
-                            "For example: 'Move my 3 PM meeting to 4 PM'"
+                            "I couldn't understand those details. "
+                            "Please try something like: 'Move my 3 PM meeting to 4 PM'"
                         )
                 else:
-                    response.message(
-                        "I couldn't understand those details. "
-                        "Please try something like: 'Move my 3 PM meeting to 4 PM'"
-                    )
+                    # Default scheduling
+                    action, event_details = parse_event_details(incoming_msg,
+                                                                formatted_phone_number)
+                    if event_details:
+                        success, message = event_manager.schedule_smart_event(
+                            event_details,
+                            event_details.get('start_time'),
+                            formatted_phone_number
+                        )
+                        response.message(message)
+                    else:
+                        response.message(
+                            "I couldn't understand those event details. Please try again.")
 
-            # View Events - OpenAI-powered parsing
+            # View Events
             elif any(keyword in incoming_msg.lower() for keyword in ['meetings', 'events']):
                 user_tz = pytz.timezone(get_timezone_from_phone(formatted_phone_number))
 
@@ -364,17 +279,10 @@ def sms_handler(request):
                     response_openai = client.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
-                            {"role": "system", "content": """
-                            Extract the date reference from the user's message about events.
-                            If no specific date is mentioned, return 'upcoming'.
-
-                            Examples:
-                            - "my events" -> upcoming
-                            - "meetings today" -> today
-                            - "events tomorrow" -> tomorrow
-                            - "meetings on 12/25" -> 12/25
-                            - "events next week" -> next week
-                            """},
+                            {
+                                "role": "system",
+                                "content": "Extract the date reference from the user's message about events."
+                            },
                             {"role": "user", "content": incoming_msg}
                         ],
                         response_format={"type": "json_object"}
@@ -390,87 +298,93 @@ def sms_handler(request):
                     # Fallback to upcoming events
                     return view_events(user_profile, 'upcoming', user_tz, response)
 
-            # Help Command
-            elif incoming_msg in ['help', 'info', '?']:
+            # Google Calendar Connection
+            elif incoming_msg in ['connect', 'sync', 'calendar']:
+                auth_link = f"{settings.BASE_URL}/authorize/{user_profile.id}/"
+                short_link = URLShortener.generate_short_link(auth_link)
+
                 response.message(
-                    "Here's what I can do:\n"
-                    "• Schedule: 'Schedule a meeting with John next week'\n"
-                    "• Modify: 'Move my 3 PM meeting to 4 PM'\n"
-                    "• Cancel: 'Cancel my 3 PM meeting'\n"
-                    "• AI Chat: Just send a message and I'll respond!\n"
-                    "• Plans: 'my plan', 'signup starter'\n\n"
-                    "Need more help? Just ask!"
+                    "Connect your Google Calendar:\n"
+                    f"{short_link}\n\n"
+                    "✅ Existing events will automatically sync\n"
+                    "🔒 Secure & Optional"
                 )
 
-            # AI Chat Mode - This goes at the end to catch any messages not matching previous commands
-            if not is_event_related:
+            # Help Command
+            elif incoming_msg in ['help', '?', 'info']:
+                response.message(
+                    "FollowUp Quickstart Guide 📅\n\n"
+                    "• Schedule Events: 'Meet John at 3pm'\n"
+                    "• Modify Events: 'Move meeting to 4pm'\n"
+                    "• Cancel Events: 'Cancel my meeting'\n"
+                    "• View Events: 'my events'\n"
+                    "• Connect Calendar: Text 'connect'\n"
+                    "• Signup/Plans: 'signup', 'my plan'"
+                )
+
+            # Subscription-Related Commands
+            elif incoming_msg.startswith('signup'):
+                if 'starter' in incoming_msg:
+                    return handle_starter_signup(user_profile, response)
+                else:
+                    response.message(
+                        "Currently, only the Starter Plan is available.\n"
+                        "Text 'signup starter' to get started."
+                    )
+            elif incoming_msg in ['plan', 'subscription', 'my plan']:
+                return show_plan_details(user_profile, response)
+
+            # Default Catch-All for Non-Specific Messages
+            else:
                 try:
-                    # Check if user has AI chat access based on subscription
+                    # AI Response for Starter Plan
                     if user_profile.subscription_plan.lower() in ['starter']:
-                        # Use OpenAI to generate a response
-                        ai_response = client.chat.completions.create(
-                            model="gpt-3.5-turbo",
-                            messages=[
-                                {
-                                    "role": "system",
-                                    "content": "You are a helpful AI assistant responding via SMS. "
-                                               "Keep responses concise due to SMS length constraints. "
-                                               "Be direct and practical. "
-                                               "Do not attempt to perform actions like scheduling events or accessing calendars."
-                                },
-                                {
-                                    "role": "user",
-                                    "content": incoming_msg
-                                }
-                            ],
-                            max_tokens=300  # Limit response length for SMS
-                        )
-
-                        # Get the AI's response
-                        ai_text = ai_response.choices[0].message.content.strip()
-
-                        # Break long responses into multiple SMS messages if needed
-                        max_sms_length = 160  # Standard SMS length
-                        if len(ai_text) > max_sms_length:
-                            # Split into chunks
-                            chunks = [ai_text[i:i + max_sms_length] for i in
-                                      range(0, len(ai_text), max_sms_length)]
-                            for chunk in chunks:
-                                response.message(chunk)
-                        else:
-                            response.message(ai_text)
-
+                        ai_response = generate_ai_response(incoming_msg)
+                        response.message(ai_response)
                     else:
-                        # Upsell message for free plan
                         response.message(
                             "AI Chat is available on the Starter Plan. "
                             "Text 'signup starter' to unlock AI assistance!"
                         )
-
                 except Exception as e:
-                    logger.error(f"AI Chat error: {e}")
+                    logger.error(f"AI Response generation error: {e}")
                     response.message(
-                        "Sorry, there was an error processing your AI chat request. "
-                        "Please try again later."
+                        "I'm not sure how to help with that. "
+                        "Text 'help' to see what I can do!"
                     )
 
-        except Exception as e:
-            logger.error(f"SMS Handler Error: {str(e)}")
-            logger.error(traceback.format_exc())
-            response.message(
-                f"Sorry, an error occurred: {str(e)}. Please try again or text 'help' for "
-                f"assistance." + "Here's what I can do:\n"
-                                 "• Schedule: 'Schedule a meeting with John next week'\n"
-                                 "• Modify: 'Move my 3 PM meeting to 4 PM'\n"
-                                 "• Cancel: 'Cancel my 3 PM meeting'\n"
-                                 "• AI Chat: Just send a message and I'll respond!\n"
-                                 "• Plans: 'my plan', 'signup starter'\n\n"
-                                 "Need more help? Just ask!"
-            )
+            return HttpResponse(str(response), content_type='application/xml')
 
-        return HttpResponse(str(response), content_type='application/xml')
+        except Exception as e:
+            logger.error(f"SMS Handler Critical Error: {e}")
+            logger.error(traceback.format_exc())
+
+            response.message(
+                "Oops! Something went wrong. "
+                "Please try again or text 'help' for assistance."
+            )
+            return HttpResponse(str(response), content_type='application/xml')
 
     return HttpResponse("Method not allowed", status=405)
+
+def generate_ai_response(message):
+    """Generate AI response for non-event messages"""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful SMS assistant. Keep responses concise and practical."
+                },
+                {"role": "user", "content": message}
+            ],
+            max_tokens=300
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"AI response generation error: {e}")
+        return "Sorry, I couldn't generate a response right now."
 
 @csrf_exempt
 def no_plan_welcome(response):
@@ -809,119 +723,6 @@ def authorize_google(request, user_id):
         return HttpResponse(f"Authentication error: {e}", status=500)
 
 
-@csrf_exempt
-def oauth2callback(request):
-    """Handle Google OAuth callback"""
-    user_id = None
-    try:
-        import os
-        import logging
-        import traceback
-        import json
-        import tempfile
-
-        logger = logging.getLogger(__name__)
-
-        # Log detailed debugging information
-        logger.error(f"Full request GET parameters: {dict(request.GET)}")
-
-        # Get client secrets from environment variable
-        google_secrets = os.environ.get('GOOGLE_SECRETS')
-
-        if not google_secrets:
-            logger.error("GOOGLE_SECRETS environment variable is NOT set")
-            return HttpResponse("Google OAuth configuration error", status=500)
-
-        # Create temporary file with client secrets
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
-            temp_file.write(google_secrets)
-            credentials_path = temp_file.name
-
-        logger.error(f"Created temporary credentials file: {credentials_path}")
-
-        # Extract user ID from state parameter
-        user_id = request.GET.get('state')
-
-        if not user_id:
-            logger.error("No user ID found in OAuth callback")
-            return HttpResponse("Invalid OAuth callback: Missing user ID", status=400)
-
-        # Retrieve user profile
-        try:
-            user_profile = UserProfile.objects.get(id=user_id)
-        except UserProfile.DoesNotExist:
-            logger.error(f"No user profile found for ID: {user_id}")
-            return HttpResponse(f"User profile not found for ID {user_id}", status=404)
-
-        try:
-            # Create OAuth flow
-            flow = Flow.from_client_secrets_file(
-                credentials_path,
-                scopes=[
-                    'https://www.googleapis.com/auth/calendar.events',
-                    'https://www.googleapis.com/auth/calendar.readonly'
-                ],
-                redirect_uri=settings.OAUTH2_REDIRECT_URI,
-                state=user_id
-            )
-
-            # Fetch the token
-            flow.fetch_token(authorization_response=request.build_absolute_uri())
-            credentials = flow.credentials
-
-            # Validate credentials
-            if not credentials or not credentials.valid:
-                logger.error("Invalid or expired credentials")
-                return HttpResponse("Failed to obtain valid credentials", status=500)
-
-            # Prepare credentials dictionary
-            creds_dict = {
-                'token': credentials.token,
-                'refresh_token': credentials.refresh_token,
-                'token_uri': credentials.token_uri,
-                'client_id': credentials.client_id,
-                'client_secret': credentials.client_secret,
-                'scopes': list(credentials.scopes)
-            }
-
-            # Store credentials
-            user_profile.google_credentials = json.dumps(creds_dict)
-            user_profile.save()
-
-            # Send SMS with success message
-            send_sms(user_profile.phone_number,
-                     "Google Calendar successfully connected! 🎉\n\n"
-                     "How to use FollowUp:\n"
-                     "• Text 'schedule' to create an event\n"
-                     "• Text 'cancel' to remove an event\n"
-                     "• Just send a message to use AI chat")
-
-            # Redirect or return success response
-            return HttpResponse(
-                'Successfully connected! You can now use SMS to manage your calendar.')
-
-        finally:
-            # Always clean up temporary file
-            try:
-                os.unlink(credentials_path)
-            except Exception as cleanup_error:
-                logger.error(f"Error cleaning up temporary credentials file: {cleanup_error}")
-
-    except Exception as e:
-        # Comprehensive error logging
-        logger.error(f"Full OAuth callback error: {str(e)}")
-        logger.error(traceback.format_exc())
-
-        # Attempt to send error SMS if possible
-        try:
-            if user_id:
-                user_profile = UserProfile.objects.get(id=user_id)
-                send_sms(user_profile.phone_number,
-                         "Google Calendar authentication failed. Please try again or contact support.")
-        except:
-            pass
-
-        return HttpResponse(f'Error in oauth2callback: {str(e)}', status=500)
 
 def ivr_menu(request):
     """Handle IVR menu for voice calls"""
@@ -1003,6 +804,7 @@ def credentials_to_dict(credentials):
 @csrf_exempt
 def oauth2callback(request):
     """Handle Google OAuth callback"""
+    user_id = None
     try:
         import os
         import logging
@@ -1050,13 +852,18 @@ def oauth2callback(request):
                 'https://www.googleapis.com/auth/calendar.events',
                 'https://www.googleapis.com/auth/calendar.readonly'
             ],
-            redirect_uri='https://checkout.chiresearchai.com/oauth2callback/',
+            redirect_uri='https://checkout.chiresearchai.com/oauth2callback/',  # Use settings variable
             state=user_id
         )
 
         # Fetch the token
         flow.fetch_token(authorization_response=request.build_absolute_uri())
         credentials = flow.credentials
+
+        # Validate credentials
+        if not credentials or not credentials.valid:
+            logger.error("Invalid or expired credentials")
+            return HttpResponse("Failed to obtain valid credentials", status=500)
 
         # Prepare credentials dictionary
         creds_dict = {
@@ -1068,9 +875,33 @@ def oauth2callback(request):
             'scopes': list(credentials.scopes)
         }
 
-        # Store credentials
+        # Store credentials and upgrade from guest mode
         user_profile.google_credentials = json.dumps(creds_dict)
+        user_profile.is_guest_mode = False  # Upgrade from guest mode
         user_profile.save()
+
+        # Check and sync pending events
+        pending_events = Event.objects.filter(
+            user_profile=user_profile,
+            needs_sync=True
+        )
+
+        if pending_events.exists():
+            # Background task to sync events
+            try:
+                for event in pending_events:
+                    # Implement Google Calendar sync logic here
+                    # This would involve using the credentials to create events in Google Calendar
+                    event.needs_sync = False
+                    event.save()
+
+                # Notify user about sync
+                send_sms(
+                    user_profile.phone_number,
+                    f"🔄 {pending_events.count()} events synced to Google Calendar!"
+                )
+            except Exception as sync_error:
+                logger.error(f"Event sync error: {sync_error}")
 
         # Clean up temporary file
         try:
@@ -1079,20 +910,35 @@ def oauth2callback(request):
             logger.error(f"Error cleaning up temporary credentials file: {cleanup_error}")
 
         # Send SMS with success message
-        send_sms(user_profile.phone_number,
-                 "Google Calendar successfully connected! 🎉\n\n"
-                 "How to use FollowUp:\n"
-                 "• Text 'schedule' to create a meeting\n"
-                 "• Text 'events' to view your schedule\n"
-                 "• Text 'help' for more commands")
+        send_sms(
+            user_profile.phone_number,
+            "Google Calendar successfully connected! 🎉\n\n"
+            "You can now:\n"
+            "• Schedule events via SMS\n"
+            "• Automatically sync to Google Calendar\n"
+            "Enjoy FollowUp!"
+        )
 
         # Redirect or return success response
-        return HttpResponse('Successfully connected! You can now use SMS to manage your calendar.')
+        return HttpResponse(
+            'Successfully connected! You can now use SMS to manage your calendar.'
+        )
 
     except Exception as e:
         # Comprehensive error logging
-        logger.error(f"OAuth callback error: {str(e)}")
+        logger.error(f"Full OAuth callback error: {str(e)}")
         logger.error(traceback.format_exc())
+
+        # Attempt to send error SMS
+        try:
+            if user_id:
+                user_profile = UserProfile.objects.get(id=user_id)
+                send_sms(
+                    user_profile.phone_number,
+                    "Google Calendar authentication failed. Please try again or contact support."
+                )
+        except:
+            pass
 
         return HttpResponse(f'Error in oauth2callback: {str(e)}', status=500)
 
@@ -1140,6 +986,7 @@ def handle_checkout_session_completed(event):
     session = event['data']['object']
     customer_id = session.get('customer')
     user_id = session.get('client_reference_id')
+
 
     logger.info(f"Checkout completed for user {user_id}")
 
