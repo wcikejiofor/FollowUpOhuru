@@ -296,26 +296,6 @@ class EventManager:
             logger.debug(f"Checking Google credentials for {phone_number}")
             logger.debug(f"Current credentials: {user_profile.google_credentials}")
 
-            # Check credentials
-            credentials = self._get_pro_credentials()
-
-            if not credentials:
-                # Generate Google OAuth authentication link
-                auth_link = f"{settings.BASE_URL}/authorize/{user_profile.id}/"
-
-                logger.warning(f"No Google credentials found for {phone_number}")
-                logger.debug(f"Generated auth link: {auth_link}")
-
-                # Send SMS with authentication link
-                send_sms(phone_number,
-                         "Please authenticate your Google Calendar to schedule events. "
-                         f"Click this link to connect: {auth_link}")
-
-                return False, (
-                    "Please authenticate with Google Calendar first. "
-                    "We've sent you a link to connect your account."
-                )
-
             # Get user's timezone
             user_tz = pytz.timezone(get_timezone_from_phone(phone_number))
 
@@ -336,61 +316,100 @@ class EventManager:
             if 'start_time' in event_details:
                 preferred_time = datetime.fromisoformat(event_details['start_time'])
             elif not preferred_time:
-                # Suggest available slots if no time provided
-                start_date = datetime.now(user_tz) + timedelta(days=1)  # tomorrow
-                end_date = start_date + timedelta(days=7)  # Look ahead for a week
-                available_slots = self.get_available_slots_for_range(
-                    credentials, start_date, end_date, user_tz
+                # Suggest some standard time slots instead of checking calendar
+                # This works even without Google Calendar auth
+                current_time = datetime.now(user_tz)
+                tomorrow = (current_time + timedelta(days=1)).replace(
+                    hour=9, minute=0, second=0, microsecond=0
                 )
 
-                if available_slots:
-                    slot_messages = [
-                        f"{i + 1}. {slot.strftime('%A, %B %d at %I:%M %p')}"
-                        for i, slot in enumerate(available_slots[:5])
-                    ]
-                    return False, (
-                            "No time specified. Here are some available slots:\n" +
-                            "\n".join(slot_messages) +
-                            "\nReply with the number of your preferred slot or specify a different time."
-                    )
-                else:
-                    return False, "No available slots found. Please try a different date range."
+                # Generate 5 standard business hour slots
+                standard_slots = [
+                    tomorrow.replace(hour=9),
+                    tomorrow.replace(hour=11),
+                    tomorrow.replace(hour=13),
+                    tomorrow.replace(hour=15),
+                    tomorrow.replace(hour=17)
+                ]
+
+                slot_messages = [
+                    f"{i + 1}. {slot.strftime('%A, %B %d at %I:%M %p')}"
+                    for i, slot in enumerate(standard_slots)
+                ]
+
+                return False, (
+                        "No time specified. Here are some suggested times:\n" +
+                        "\n".join(slot_messages) +
+                        "\nReply with the number of your preferred slot or specify a different time."
+                )
 
             # Validate the time
             current_time = datetime.now(user_tz)
             if preferred_time <= current_time:
                 return False, "Please provide a future time."
 
-            # Check slot availability and create event
-            if self.is_slot_available(credentials, preferred_time, user_tz):
-                # Prepare event details
-                # Prepare event details
-                event_details['start_time'] = preferred_time.isoformat()
+            # Prepare event details
+            event_details['start_time'] = preferred_time.isoformat()
 
-                # Check if end time was specified, otherwise default to 1 hour
-                if 'end_time' not in event_details:
-                    event_details['end_time'] = (preferred_time + timedelta(hours=1)).isoformat()
+            # Check if end time was specified, otherwise default to 1 hour
+            if 'end_time' not in event_details:
+                event_details['end_time'] = (preferred_time + timedelta(hours=1)).isoformat()
 
-                # Default summary if not provided
-                if 'summary' not in event_details:
-                    event_details['summary'] = event_details.get('summary',
-                                                                 f"Meeting with {event_details.get('attendee', 'Someone')}")
+            # Default summary if not provided
+            if 'summary' not in event_details:
+                event_details['summary'] = event_details.get('summary',
+                                                             f"Meeting with {event_details.get('attendee', 'Someone')}")
 
-                # Create the event
-                success = self.create_event(event_details, phone_number)
+            # Check credentials - but don't require them!
+            credentials = self._get_pro_credentials()
 
-                if success:
-                    # Parse end time
-                    end_time = datetime.fromisoformat(event_details['end_time'])
+            if not credentials:
+                # Store locally without Google Calendar
+                start_time = datetime.fromisoformat(event_details['start_time'])
+                end_time = datetime.fromisoformat(event_details['end_time'])
+                summary = event_details.get('summary', 'Untitled Event')
 
-                    # Format both start and end times
-                    formatted_start = preferred_time.strftime('%I:%M %p').lstrip('0')
-                    formatted_end = end_time.strftime('%I:%M %p').lstrip('0')
-                    formatted_date = preferred_time.strftime('%A, %B %d')
+                # Create local event
+                Event.objects.create(
+                    user_profile=user_profile,
+                    summary=summary,
+                    start_time=start_time,
+                    end_time=end_time,
+                    needs_sync=True  # Flag for future sync
+                )
 
-                    return True, f"Event scheduled for {formatted_date} from {formatted_start} to {formatted_end}"
+                # Generate Google OAuth authentication link for later
+                auth_link = f"{settings.BASE_URL}/authorize/{user_profile.id}/"
+
+                # Format both start and end times for the response
+                formatted_start = start_time.strftime('%I:%M %p').lstrip('0')
+                formatted_end = end_time.strftime('%I:%M %p').lstrip('0')
+                formatted_date = start_time.strftime('%A, %B %d')
+
+                return True, (
+                    f"Event scheduled for {formatted_date} from {formatted_start} to {formatted_end}\n\n"
+                    f"To sync with Google Calendar: {auth_link}"
+                )
+            else:
+                # Continue with existing Google Calendar flow
+                if self.is_slot_available(credentials, preferred_time, user_tz):
+                    # Create the event using Google Calendar
+                    success = self.create_event(event_details, phone_number)
+
+                    if success:
+                        # Parse end time
+                        end_time = datetime.fromisoformat(event_details['end_time'])
+
+                        # Format both start and end times
+                        formatted_start = preferred_time.strftime('%I:%M %p').lstrip('0')
+                        formatted_end = end_time.strftime('%I:%M %p').lstrip('0')
+                        formatted_date = preferred_time.strftime('%A, %B %d')
+
+                        return True, f"Event scheduled for {formatted_date} from {formatted_start} to {formatted_end}"
+                    else:
+                        return False, "Failed to create the event. Please try again."
                 else:
-                    return False, "Failed to create the event. Please try again."
+                    return False, "The selected time is not available. Please choose another time."
 
         except UserProfile.DoesNotExist:
             logger.error(f"No user profile found for phone number {phone_number}")
