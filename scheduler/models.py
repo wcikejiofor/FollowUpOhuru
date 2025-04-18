@@ -159,6 +159,7 @@ class Event(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     location = models.CharField(max_length=255, blank=True, null=True)
+    needs_sync = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.summary} - {self.start_time}"
