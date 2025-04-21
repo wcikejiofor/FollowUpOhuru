@@ -5,11 +5,13 @@ import pytz
 import json
 from datetime import timedelta
 
+
 class SubscriptionPlan(models.TextChoices):
     FREE = 'FREE', 'Free Plan'
     STARTER = 'STARTER', 'Starter Plan'
     PRO = 'PRO', 'Pro Plan'
     BUSINESS = 'BUSINESS', 'Business Plan'
+
 
 class UserProfile(models.Model):
     phone_number = models.CharField(max_length=50, null=True, blank=True)
@@ -65,7 +67,7 @@ class UserProfile(models.Model):
         """Increment the number of meetings for the current month"""
         # Skip incrementing for guest mode or if it's a plan with unlimited meetings
         if (self.is_guest_mode or
-            self.subscription_plan in [SubscriptionPlan.PRO, SubscriptionPlan.BUSINESS]):
+                self.subscription_plan in [SubscriptionPlan.PRO, SubscriptionPlan.BUSINESS]):
             return
 
         # Reset meetings count at the start of each month
