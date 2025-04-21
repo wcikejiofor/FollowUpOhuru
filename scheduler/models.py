@@ -13,6 +13,8 @@ class SubscriptionPlan(models.TextChoices):
 
 class UserProfile(models.Model):
     phone_number = models.CharField(max_length=50, null=True, blank=True)
+    default_reminder_minutes = models.IntegerField(default=60)  # Default to 60 minutes (1 hour)
+    enable_reminders = models.BooleanField(default=True)
 
     # Enhanced subscription fields
     subscription_plan = models.CharField(
@@ -160,6 +162,8 @@ class Event(models.Model):
     end_time = models.DateTimeField()
     location = models.CharField(max_length=255, blank=True, null=True)
     needs_sync = models.BooleanField(default=False)
+    reminder_minutes = models.IntegerField(null=True, blank=True)  # NULL means use user default
+    reminder_sent = models.BooleanField(default=False)  # Track if reminder was sent
 
     def __str__(self):
         return f"{self.summary} - {self.start_time}"

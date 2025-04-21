@@ -184,6 +184,7 @@ def sms_handler(request):
 
             # Parse and validate phone number
             try:
+                import phonenumbers
                 parsed_number = phonenumbers.parse(original_phone_number, None)
                 formatted_phone_number = phonenumbers.format_number(
                     parsed_number,
@@ -202,7 +203,10 @@ def sms_handler(request):
                     phone_number=formatted_phone_number,
                     subscription_plan=SubscriptionPlan.STARTER,
                     subscription_start_date=timezone.now(),
-                    trial_start_date=timezone.now()
+                    trial_start_date=timezone.now(),
+                    # Set default reminder settings for new users
+                    default_reminder_minutes=60,
+                    enable_reminders=True
                 )
 
                 # Conditionally set guest mode if the field exists
@@ -237,8 +241,63 @@ def sms_handler(request):
 
             event_manager = EventManager(user_profile)
 
+            # NEW: Reminder Settings Handling
+            if 'reminder' in incoming_msg:
+                import re
+                if 'set default' in incoming_msg or 'default reminder' in incoming_msg:
+                    # Extract time from message using regex or parsing
+                    # Example: "set default reminder to 30 minutes"
+                    time_match = re.search(r'(\d+)\s*(minute|minutes|min|hour|hours|hr)',
+                                           incoming_msg)
+                    if time_match:
+                        value = int(time_match.group(1))
+                        unit = time_match.group(2)
+
+                        # Convert hours to minutes
+                        if 'hour' in unit:
+                            value *= 60
+
+                        user_profile.default_reminder_minutes = value
+                        user_profile.save()
+
+                        # Format for display
+                        if value >= 60 and value % 60 == 0:
+                            display = f"{value // 60} hour{'s' if value // 60 > 1 else ''}"
+                        else:
+                            display = f"{value} minutes"
+
+                        response.message(f"Default reminder time set to {display} before events.")
+                    else:
+                        response.message("Please specify a time, like '30 minutes' or '1 hour'.")
+
+                elif 'off' in incoming_msg or 'disable' in incoming_msg:
+                    user_profile.enable_reminders = False
+                    user_profile.save()
+                    response.message("Event reminders have been turned off.")
+
+                elif 'on' in incoming_msg or 'enable' in incoming_msg:
+                    user_profile.enable_reminders = True
+                    user_profile.save()
+                    response.message("Event reminders have been turned on.")
+
+                else:
+                    response.message(
+                        "Reminder commands:\n"
+                        "• 'set default reminder to 30 minutes'\n"
+                        "• 'reminders off'\n"
+                        "• 'reminders on'"
+                    )
+                return HttpResponse(str(response), content_type='application/xml')
+
             # Event Handling
-            if is_event_related:
+            elif is_event_related:
+                # Parse for reminder settings in event creation
+                reminder_match = None
+                if 'remind' in incoming_msg:
+                    import re
+                    reminder_match = re.search(
+                        r'remind me (\d+)\s*(minute|minutes|min|hour|hours|hr)', incoming_msg)
+
                 # Smart Event Handling (Scheduling, Modification, Cancellation)
                 if 'cancel' in incoming_msg:
                     action, event_details = parse_event_details(incoming_msg,
@@ -267,6 +326,17 @@ def sms_handler(request):
                     action, event_details = parse_event_details(incoming_msg,
                                                                 formatted_phone_number)
                     if event_details:
+                        # Add reminder details if found
+                        if reminder_match:
+                            value = int(reminder_match.group(1))
+                            unit = reminder_match.group(2)
+
+                            # Convert hours to minutes
+                            if 'hour' in unit:
+                                value *= 60
+
+                            event_details['reminder_minutes'] = value
+
                         success, message = event_manager.schedule_smart_event(
                             event_details,
                             event_details.get('start_time'),
@@ -325,6 +395,7 @@ def sms_handler(request):
                     "• Modify Events: 'Move meeting to 4pm'\n"
                     "• Cancel Events: 'Cancel my meeting'\n"
                     "• View Events: 'my events'\n"
+                    "• Reminders: 'set default reminder to 30 minutes'\n"
                     "• Connect Calendar: Text 'connect'\n"
                     "• Signup/Plans: 'signup', 'my plan'"
                 )
