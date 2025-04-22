@@ -35,6 +35,14 @@ def parse_event_details(incoming_msg, phone_number):
     user_timezone = pytz.timezone(get_timezone_from_phone(phone_number))
     current_date = datetime.now(user_timezone)
 
+    # Extract reminder minutes using regex
+    reminder_match = re.search(r'remind me (\d+)\s*(minute|minutes|min)', incoming_msg)
+    reminder_minutes = None
+    if reminder_match:
+        reminder_minutes = int(reminder_match.group(1))
+        # Remove reminder text from the message
+        incoming_msg = incoming_msg.replace(reminder_match.group(0), '').strip()
+
     # Use OpenAI to parse the message
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -51,7 +59,8 @@ def parse_event_details(incoming_msg, phone_number):
                     "summary": "EXACT NAME OF THE APPOINTMENT/MEETING",
                     "location": "FULL ADDRESS OR LOCATION IF PROVIDED",
                     "start_time": "YYYY-MM-DD HH:MM:SS",
-                    "duration_minutes": 60
+                    "duration_minutes": 60,
+                    "reminder_minutes": null or number of minutes before event
                 }}
             }}
 
@@ -72,6 +81,11 @@ def parse_event_details(incoming_msg, phone_number):
     parsed_data = json.loads(response.choices[0].message.content)
 
     event = parsed_data['event']
+
+    # Override or add reminder minutes
+    if reminder_minutes is not None:
+        event['reminder_minutes'] = reminder_minutes
+
     if 'start_time' in event:
         # Parse the time with timezone awareness
         start_time = dateparser.parse(
@@ -88,7 +102,8 @@ def parse_event_details(incoming_msg, phone_number):
 
         # Convert to ISO format
         event['start_time'] = start_time.isoformat()
-        event['end_time'] = (start_time + timedelta(minutes=event.get('duration_minutes', 60))).isoformat()
+        event['end_time'] = (
+                    start_time + timedelta(minutes=event.get('duration_minutes', 60))).isoformat()
 
     return parsed_data['action'], event
 
