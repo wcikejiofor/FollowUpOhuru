@@ -1,8 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from datetime import timedelta
-from .models import Event
-from .sms_sender import send_sms
+from scheduler.models import Event
+from scheduler.sms_sender import send_sms
 import logging
 
 logger = logging.getLogger(__name__)
