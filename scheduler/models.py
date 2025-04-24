@@ -178,3 +178,27 @@ class ShortLink(models.Model):
 
     def __str__(self):
         return f"{self.short_code} - {self.original_url[:50]}..."
+
+
+class ScheduledTask(models.Model):
+    TASK_TYPES = (
+        ('reminder', 'Event Reminder'),
+        # Add other task types as needed
+    )
+
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    )
+
+    task_type = models.CharField(max_length=20, choices=TASK_TYPES)
+    scheduled_time = models.DateTimeField()
+    data = models.TextField()  # JSON data for the task
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.task_type} task scheduled for {self.scheduled_time}"
