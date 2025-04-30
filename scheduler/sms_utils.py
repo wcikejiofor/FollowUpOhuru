@@ -72,6 +72,7 @@ def send_sms(to_number, message):
         logger.error(f"Error sending SMS to {to_number}: {str(e)}")
         return False
 
+
 class SMSScheduler:
     def __init__(self, user_profile):
         self.user_profile = user_profile
@@ -93,7 +94,6 @@ class SMSScheduler:
 
             message = (
                 f"✅ {event_name} moved from {old_time_str} to {new_time_str} on {date_str}. "
-
             )
             self._send_sms(to_number, message)
 
@@ -126,32 +126,125 @@ class SMSScheduler:
             message = (
                 f"✅ **{summary} scheduled from {start_time_str} to {end_time_str}.**"
             )
+
+            # Add reminder info if present
+            if 'reminder_minutes' in event_details and self.user_profile.enable_reminders:
+                minutes = event_details['reminder_minutes']
+                if minutes >= 60 and minutes % 60 == 0:
+                    time_display = f"{minutes // 60} hour"
+                    if minutes // 60 > 1:
+                        time_display += "s"
+                else:
+                    time_display = f"{minutes} minute"
+                    if minutes > 1:
+                        time_display += "s"
+                message += f" You'll receive a reminder {time_display} before."
+
             self._send_sms(to_number, message)
 
         except Exception as e:
             logger.error(f"Error sending confirmation SMS: {e}")
             logger.error(traceback.format_exc())
 
-    def send_reminder_sms(self, to_number, event_details, minutes_before=30):
-        """Schedule a reminder SMS for before an event"""
+    def schedule_reminder(self, event, phone_number):
+        """Schedule a reminder for an event"""
+        try:
+            # Log that we're trying to schedule a reminder
+            logger.debug(f"Attempting to schedule reminder for event {event.id}")
+
+            if not event.reminder_minutes or not self.user_profile.enable_reminders:
+                logger.debug(f"Reminders disabled or no reminder minutes for event {event.id}")
+                return False
+
+            # Calculate reminder time
+            reminder_time = event.start_time - timedelta(minutes=event.reminder_minutes)
+
+            # Don't schedule if reminder time is in the past
+            now = timezone.now()
+            if reminder_time <= now:
+                logger.warning(f"Reminder time for event {event.id} is in the past, not scheduling")
+                return False
+
+            logger.debug(f"Scheduling reminder for event {event.id} at {reminder_time}")
+
+            # Create a scheduled task
+            from django.db import models
+            # Check if we have a ScheduledTask model
+            try:
+                from .models import ScheduledTask
+                # Create a scheduled task
+                task = ScheduledTask.objects.create(
+                    task_type='reminder',
+                    scheduled_time=reminder_time,
+                    data=json.dumps({
+                        'event_summary': event.summary,
+                        'event_time': event.start_time.isoformat(),
+                        'phone_number': phone_number
+                    }),
+                    status='pending',
+                    event=event
+                )
+
+                logger.debug(f"Created scheduled task {task.id} for reminder")
+                return True
+            except ImportError:
+                logger.error("ScheduledTask model not found, cannot schedule reminder")
+                # Fallback to old method as placeholder
+                self.send_reminder_sms_legacy(phone_number, {
+                    'start_time': event.start_time.isoformat(),
+                    'summary': event.summary
+                }, event.reminder_minutes)
+                return False
+
+        except Exception as e:
+            logger.error(f"Error scheduling reminder: {e}")
+            logger.error(traceback.format_exc())
+            return False
+
+    def send_reminder_sms_legacy(self, to_number, event_details, minutes_before=30):
+        """Legacy method for scheduling reminders (placeholder) - will be deprecated"""
         try:
             event_time = datetime.fromisoformat(event_details['start_time'])
             reminder_time = event_time - timedelta(minutes=minutes_before)
             current_time = datetime.now(event_time.tzinfo)
 
-            # Only log that we would schedule if reminder time is in future
-            if reminder_time > current_time:
-                logger.info(f"Would schedule reminder for {to_number} at {reminder_time}")
-                # TODO: Implement actual scheduling using Celery or similar
-                return
-
-            # Don't send immediate reminder if it's not time yet
-            if current_time < reminder_time:
-                return
+            # Log that we would schedule a reminder
+            logger.info(f"Would schedule reminder for {to_number} at {reminder_time}")
+            logger.warning(
+                "Using legacy reminder scheduling method - should be replaced with tasks")
+            # This method doesn't actually schedule anything, just logs
 
         except Exception as e:
-            logger.error(f"Error scheduling reminder SMS: {e}")
+            logger.error(f"Error in legacy reminder scheduling: {e}")
             logger.error(traceback.format_exc())
+
+    def send_reminder_now(self, to_number, event):
+        """Send a reminder SMS for an event immediately"""
+        try:
+            # Format the time in user's timezone
+            user_tz = pytz.timezone(get_timezone_from_phone(to_number))
+            event_time = event.start_time.astimezone(user_tz)
+            formatted_time = event_time.strftime("%I:%M %p").lstrip('0')
+            date_str = event_time.strftime("%A")
+
+            # Create reminder message
+            message = f"Reminder: You have '{event.summary}' at {formatted_time} today ({date_str})."
+
+            # Send the SMS
+            result = self._send_sms(to_number, message)
+
+            # Mark reminder as sent in the database
+            if result:
+                event.reminder_sent = True
+                event.save()
+                logger.info(f"Marked reminder as sent for event {event.id}")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error sending reminder SMS: {e}")
+            logger.error(traceback.format_exc())
+            return False
 
     def send_cancellation_confirmation_sms(self, to_number, event_details):
         """Send a cancellation confirmation SMS with undo option"""
@@ -161,7 +254,6 @@ class SMSScheduler:
 
             message = (
                 f"❌ {event_details['summary']} at {time_str} has been canceled. "
-
             )
             self._send_sms(to_number, message)
         except Exception as e:
@@ -176,9 +268,12 @@ class SMSScheduler:
                 from_=settings.TWILIO_PHONE_NUMBER,
                 to=to_number
             )
+            logger.info(f"SMS sent successfully to {to_number}")
+            return True
         except Exception as e:
             logger.error(f"SMS sending error: {e}")
             logger.error(traceback.format_exc())
+            return False
 
 
 class EventManager:

@@ -167,7 +167,6 @@ def handle_transcription(request):
 
     return HttpResponse()
 
-
 @csrf_exempt
 @validate_twilio_request
 def sms_handler(request):
@@ -196,7 +195,7 @@ def sms_handler(request):
             # Find or Create User Profile with Zero-Friction Approach
             try:
                 # First, try to get the existing user profile
-                user_profile = UserProfile.objects.get(phone_number=formatted_phone_number)
+                user_profile = UserProfile.objects.filter(phone_number=formatted_phone_number).first()
             except UserProfile.DoesNotExist:
                 # If the user doesn't exist, create a new profile
                 user_profile = UserProfile.objects.create(
@@ -242,7 +241,7 @@ def sms_handler(request):
             event_manager = EventManager(user_profile)
 
             # NEW: Reminder Settings Handling
-            if 'reminder' in incoming_msg:
+            if 'reminder' in incoming_msg and not is_event_related:
                 import re
                 if 'set default' in incoming_msg or 'default reminder' in incoming_msg:
                     # Extract time from message using regex or parsing
@@ -295,8 +294,15 @@ def sms_handler(request):
                 reminder_match = None
                 if 'remind' in incoming_msg:
                     import re
+                    logger.debug(f"Processing message with reminder: {incoming_msg}")
+
                     reminder_match = re.search(
                         r'remind me (\d+)\s*(minute|minutes|min|hour|hours|hr)', incoming_msg)
+
+                    if reminder_match:
+                        logger.debug(f"Found reminder match: {reminder_match.group(0)}")
+                        logger.debug(
+                            f"Minutes: {reminder_match.group(1)}, Unit: {reminder_match.group(2)}")
 
                 # Smart Event Handling (Scheduling, Modification, Cancellation)
                 if 'cancel' in incoming_msg:
@@ -336,12 +342,36 @@ def sms_handler(request):
                                 value *= 60
 
                             event_details['reminder_minutes'] = value
+                            logger.debug(f"Added reminder_minutes to event_details: {value}")
+                        elif user_profile.enable_reminders:
+                            # Use default reminder minutes if reminders are enabled and no explicit reminder was set
+                            event_details[
+                                'reminder_minutes'] = user_profile.default_reminder_minutes
+                            logger.debug(
+                                f"Using default reminder_minutes: {user_profile.default_reminder_minutes}")
 
+                        # Schedule the event
                         success, message = event_manager.schedule_smart_event(
                             event_details,
                             event_details.get('start_time'),
                             formatted_phone_number
                         )
+
+                        # Add reminder info to the response message if it was scheduled with a reminder
+                        if success and user_profile.enable_reminders and 'reminder_minutes' in event_details:
+                            # Only add reminder info if not already in the message
+                            if "reminder" not in message.lower():
+                                minutes = event_details['reminder_minutes']
+                                if minutes >= 60 and minutes % 60 == 0:
+                                    time_display = f"{minutes // 60} hour"
+                                    if minutes // 60 > 1:
+                                        time_display += "s"
+                                else:
+                                    time_display = f"{minutes} minute"
+                                    if minutes > 1:
+                                        time_display += "s"
+                                message += f" You'll receive a reminder {time_display} before."
+
                         response.message(message)
                     else:
                         response.message(
