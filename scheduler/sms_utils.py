@@ -1,6 +1,6 @@
 import logging
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 import dateparser
 import json
@@ -160,7 +160,7 @@ class SMSScheduler:
             reminder_time = event.start_time - timedelta(minutes=event.reminder_minutes)
 
             # Don't schedule if reminder time is in the past
-            now = timezone.now()
+            now = timezone.now()  # Make sure to import timezone from django.utils
             if reminder_time <= now:
                 logger.warning(f"Reminder time for event {event.id} is in the past, not scheduling")
                 return False
@@ -168,33 +168,23 @@ class SMSScheduler:
             logger.debug(f"Scheduling reminder for event {event.id} at {reminder_time}")
 
             # Create a scheduled task
-            from django.db import models
-            # Check if we have a ScheduledTask model
-            try:
-                from .models import ScheduledTask
-                # Create a scheduled task
-                task = ScheduledTask.objects.create(
-                    task_type='reminder',
-                    scheduled_time=reminder_time,
-                    data=json.dumps({
-                        'event_summary': event.summary,
-                        'event_time': event.start_time.isoformat(),
-                        'phone_number': phone_number
-                    }),
-                    status='pending',
-                    event=event
-                )
+            from scheduler.models import ScheduledTask
 
-                logger.debug(f"Created scheduled task {task.id} for reminder")
-                return True
-            except ImportError:
-                logger.error("ScheduledTask model not found, cannot schedule reminder")
-                # Fallback to old method as placeholder
-                self.send_reminder_sms_legacy(phone_number, {
-                    'start_time': event.start_time.isoformat(),
-                    'summary': event.summary
-                }, event.reminder_minutes)
-                return False
+            # Create a scheduled task
+            task = ScheduledTask.objects.create(
+                task_type='reminder',
+                scheduled_time=reminder_time,
+                data=json.dumps({
+                    'event_summary': event.summary,
+                    'event_time': event.start_time.isoformat(),
+                    'phone_number': phone_number
+                }),
+                status='pending',
+                event=event
+            )
+
+            logger.debug(f"Created scheduled task {task.id} for reminder")
+            return True
 
         except Exception as e:
             logger.error(f"Error scheduling reminder: {e}")
@@ -464,14 +454,18 @@ class EventManager:
                 end_time = datetime.fromisoformat(event_details['end_time'])
                 summary = event_details.get('summary', 'Untitled Event')
 
-                # Create local event
-                Event.objects.create(
+                # Create local event with reminder_minutes if provided
+                event = Event.objects.create(
                     user_profile=user_profile,
                     summary=summary,
                     start_time=start_time,
                     end_time=end_time,
-                    needs_sync=True  # Flag for future sync
+                    needs_sync=True,  # Flag for future sync
+                    reminder_minutes=event_details.get('reminder_minutes')  # Add reminder minutes
                 )
+
+                # Schedule a reminder for this event
+                self.sms_scheduler.schedule_reminder(event, phone_number)
 
                 # Generate Google OAuth authentication link for later
                 auth_link = f"{settings.BASE_URL}/authorize/{user_profile.id}/"
@@ -494,6 +488,20 @@ class EventManager:
                     if success:
                         # Parse end time
                         end_time = datetime.fromisoformat(event_details['end_time'])
+
+                        # Also create a local event for reminder tracking
+                        event = Event.objects.create(
+                            user_profile=user_profile,
+                            summary=event_details.get('summary', 'Untitled Event'),
+                            start_time=preferred_time,
+                            end_time=end_time,
+                            needs_sync=False,  # Already synced
+                            reminder_minutes=event_details.get('reminder_minutes')
+                            # Add reminder minutes
+                        )
+
+                        # Schedule a reminder for this event
+                        self.sms_scheduler.schedule_reminder(event, phone_number)
 
                         # Format both start and end times
                         formatted_start = preferred_time.strftime('%I:%M %p').lstrip('0')

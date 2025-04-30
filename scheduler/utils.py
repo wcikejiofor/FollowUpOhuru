@@ -409,3 +409,51 @@ def parse_preferred_time(message, reference_date):
     except Exception as e:
         logger.error(f"Error parsing preferred time: {e}")
         return None
+
+
+def schedule_event_reminder(event):
+    """Schedule a reminder task for an event"""
+    from scheduler.models import ScheduledTask
+    import json
+    import logging
+    from django.utils import timezone
+    from datetime import timedelta
+
+    logger = logging.getLogger(__name__)
+
+    # Skip if reminders are disabled
+    if not event.user_profile.enable_reminders:
+        return None
+
+    # Get reminder minutes (use default if not specified)
+    reminder_minutes = event.reminder_minutes
+    if reminder_minutes is None:
+        reminder_minutes = event.user_profile.default_reminder_minutes
+
+    # Calculate when to send reminder
+    reminder_time = event.start_time - timedelta(minutes=reminder_minutes)
+
+    # Don't schedule if reminder time is in the past
+    if reminder_time <= timezone.now():
+        return None
+
+    # Prepare task data
+    task_data = {
+        'phone_number': event.user_profile.phone_number,
+        'event_summary': event.summary,
+        'event_time': event.start_time.isoformat(),
+        'location': event.location or '',
+        'reminder_minutes': reminder_minutes
+    }
+
+    # Create task
+    task = ScheduledTask.objects.create(
+        task_type='reminder',
+        data=json.dumps(task_data),
+        scheduled_time=reminder_time,
+        status='pending',
+        event=event
+    )
+
+    logger.info(f"Scheduled reminder for event {event.id} at {reminder_time}")
+    return task
