@@ -1,8 +1,9 @@
-import logging
 from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
+import logging
 import traceback
+import json  # Add this import
 
 logger = logging.getLogger(__name__)
 
@@ -128,11 +129,64 @@ class ReminderDebugger:
             logger.error(f"Error debugging user reminders: {str(e)}")
             logger.error(traceback.format_exc())
 
-# Usage examples in Django shell:
-# from scheduler.reminder_debugger import ReminderDebugger
-#
-# # Run comprehensive reminder check
-# ReminderDebugger.comprehensive_reminder_check()
-#
-# # Debug reminders for a specific phone number
-# ReminderDebugger.debug_user_reminders('+1234567890')
+    # Add this new method here
+    @staticmethod
+    def check_scheduled_tasks():
+        """
+        Check scheduled reminder tasks
+        """
+        from scheduler.models import ScheduledTask
+        import json
+
+        # Get pending tasks
+        pending_tasks = ScheduledTask.objects.filter(
+            task_type='reminder',
+            status='pending'
+        ).order_by('scheduled_time')
+
+        logger.info(f"Total Pending Reminder Tasks: {pending_tasks.count()}")
+
+        now = timezone.now()
+
+        # Check tasks that should have been processed
+        overdue_tasks = pending_tasks.filter(scheduled_time__lte=now)
+        logger.info(f"Overdue Tasks (should be processed): {overdue_tasks.count()}")
+
+        # Analyze tasks
+        for task in pending_tasks[:10]:  # Examine the first 10 tasks
+            try:
+                logger.info(f"Task ID: {task.id}")
+                logger.info(f"Scheduled Time: {task.scheduled_time}")
+
+                data = json.loads(task.data)
+                logger.info(f"Phone: {data.get('phone_number', 'Unknown')}")
+                logger.info(f"Event Summary: {data.get('event_summary', 'Unknown')}")
+
+                # Check if the task is linked to an event
+                if task.event:
+                    logger.info(f"Linked to Event ID: {task.event.id}")
+                    logger.info(f"Event Start Time: {task.event.start_time}")
+                else:
+                    logger.info("Not linked to an event")
+
+                logger.info("-" * 50)
+            except Exception as e:
+                logger.error(f"Error analyzing task {task.id}: {e}")
+
+    # Add this method to run a full diagnostic
+    @staticmethod
+    def run_full_diagnostic():
+        """
+        Run a full diagnostic on the reminder system
+        """
+        logger.info("======= FULL REMINDER SYSTEM DIAGNOSTIC =======")
+
+        # Check scheduled tasks
+        logger.info("\n1. CHECKING SCHEDULED TASKS")
+        ReminderDebugger.check_scheduled_tasks()
+
+        # Check events
+        logger.info("\n2. CHECKING REMINDER-ELIGIBLE EVENTS")
+        ReminderDebugger.comprehensive_reminder_check()
+
+        logger.info("\n======= DIAGNOSTIC COMPLETE =======")
