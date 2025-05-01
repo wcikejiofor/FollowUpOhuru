@@ -1,40 +1,24 @@
 import logging
 import json
-from datetime import datetime, timedelta, timezone
+import traceback
+from datetime import datetime, timedelta
 import pytz
 import dateparser
-import json
-import logging
-import pytz
-from datetime import datetime, timedelta
-from google.oauth2.credentials import Credentials
-from .google_calendar import get_calendar_service, get_timezone_from_phone
+from django.utils import timezone
 from django.conf import settings
 from dateutil import parser
-
 from twilio.rest import Client
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 from .models import UserProfile, Event
-from .google_calendar import get_timezone_from_phone, get_calendar_service
-
-import json
-import logging
-import traceback
-from datetime import datetime, timedelta
-import pytz
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from django.conf import settings
-from .models import Event
-from .utils import get_timezone_from_phone, create_event_in_calendar, cancel_event, \
-    get_available_slots, format_slots_message
-
+from .google_calendar import get_calendar_service, get_timezone_from_phone
 from .utils import (
     parse_event_details,
     create_event_in_calendar,
-    cancel_event
+    cancel_event,
+    get_available_slots,
+    format_slots_message
 )
 from .sms_sender import send_sms
 
@@ -150,22 +134,25 @@ class SMSScheduler:
         """Schedule a reminder for an event"""
         try:
             # Log that we're trying to schedule a reminder
-            logger.debug(f"Attempting to schedule reminder for event {event.id}")
+            logger.info(f"Attempting to schedule reminder for event {event.id}")
+            logger.info(f"Event details: summary={event.summary}, start_time={event.start_time}, reminder_minutes={event.reminder_minutes}")
+            logger.info(f"User profile: enable_reminders={self.user_profile.enable_reminders}, default_reminder_minutes={self.user_profile.default_reminder_minutes}")
 
             if not event.reminder_minutes or not self.user_profile.enable_reminders:
-                logger.debug(f"Reminders disabled or no reminder minutes for event {event.id}")
+                logger.warning(f"Reminders disabled or no reminder minutes for event {event.id}")
                 return False
 
             # Calculate reminder time
             reminder_time = event.start_time - timedelta(minutes=event.reminder_minutes)
+            logger.info(f"Calculated reminder time: {reminder_time}")
 
             # Don't schedule if reminder time is in the past
-            now = timezone.now()  # Make sure to import timezone from django.utils
+            now = timezone.now()
             if reminder_time <= now:
                 logger.warning(f"Reminder time for event {event.id} is in the past, not scheduling")
                 return False
 
-            logger.debug(f"Scheduling reminder for event {event.id} at {reminder_time}")
+            logger.info(f"Scheduling reminder for event {event.id} at {reminder_time}")
 
             # Create a scheduled task
             from scheduler.models import ScheduledTask
@@ -183,7 +170,7 @@ class SMSScheduler:
                 event=event
             )
 
-            logger.debug(f"Created scheduled task {task.id} for reminder")
+            logger.info(f"Created scheduled task {task.id} for reminder")
             return True
 
         except Exception as e:
