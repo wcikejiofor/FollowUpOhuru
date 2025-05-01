@@ -606,16 +606,26 @@ class EventManager:
                 if not end_time.tzinfo:
                     end_time = user_tz.localize(end_time)
 
-                Event.objects.create(
+                # Create the event
+                event = Event.objects.create(
                     user_profile=self.user_profile,
                     summary=event_info['summary'],
                     start_time=start_time,
                     end_time=end_time,
-                    location=event_info.get('location', 'Virtual Meeting')
+                    location=event_info.get('location', 'Virtual Meeting'),
+                    reminder_minutes=event_info.get('reminder_minutes', self.user_profile.default_reminder_minutes)
                 )
+
+                # Schedule reminder if enabled
+                if self.user_profile.enable_reminders:
+                    scheduler = SMSScheduler(self.user_profile)
+                    scheduler.schedule_reminder(event, phone_number)
+                    logger.info(f"Scheduled reminder for event {event.id} at {start_time}")
+
             return True
         except Exception as e:
             logger.error(f"Error creating free event: {e}")
+            logger.error(traceback.format_exc())
             return False
 
     def modify_event(self, modification_details, phone_number):
