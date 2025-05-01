@@ -1,0 +1,2 @@
+# Run reminder processor every minute
+* * * * * cd /path/to/your/project && python manage.py process_reminders >> /var/log/reminder_processor.log 2>&1 
