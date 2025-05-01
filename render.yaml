@@ -24,6 +24,10 @@ services:
         fromDatabase:
           name: calendar-db
           property: connectionString
+      - key: DJANGO_SETTINGS_MODULE
+        value: myproject.settings
+      - key: PYTHONUNBUFFERED
+        value: 1
 
 databases:
   - name: calendar-db

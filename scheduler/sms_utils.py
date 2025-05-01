@@ -369,7 +369,12 @@ class EventManager:
             logger.debug(f"Current credentials: {user_profile.google_credentials}")
 
             # Get user's timezone
-            user_tz = pytz.timezone(get_timezone_from_phone(phone_number))
+            tz_name = get_timezone_from_phone(phone_number)
+            if not tz_name:
+                logger.error(f"Could not determine timezone for phone number {phone_number}")
+                return False, "Could not determine your timezone. Please try again."
+            
+            user_tz = pytz.timezone(tz_name)
 
             # Parse preferred time
             preferred_time = dateparser.parse(
