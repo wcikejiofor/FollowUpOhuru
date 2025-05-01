@@ -106,8 +106,15 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Database configuration
 DATABASES = {
-    'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
+    'default': dj_database_url.config(
+        default=os.getenv('DATABASE_URL'),
+        conn_max_age=600,
+        conn_health_checks=True
+    )
 }
+
+# Log database configuration
+logger.info(f"Database configuration: {DATABASES['default']}")
 
 # Base URL
 BASE_URL = os.getenv('BASE_URL', 'https://checkout.chiresearchai.com')
@@ -409,15 +416,6 @@ SESSION_COOKIE_AGE = 86400  # 24 hours in seconds
 
 import dj_database_url
 import os
-
-# Database configuration
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL'),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
 
 # Static files configuration
 STATIC_URL = '/static/'

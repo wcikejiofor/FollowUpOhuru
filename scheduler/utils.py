@@ -312,17 +312,20 @@ def cancel_event(credentials, event_details, user_timezone):
 def get_timezone_from_phone(phone_number):
     """Get timezone from phone number or return default"""
     try:
+        # Parse the phone number
+        parsed_number = phonenumbers.parse(phone_number)
+        
         # For US numbers, we'll default to Eastern Time
-        # You can expand this logic later for other regions
-        default_tz = 'America/New_York'
-
-        if phone_number.startswith('+1'):  # US/Canada number
-            return default_tz
-
-        return default_tz  # Default fallback
+        if parsed_number.country_code == 1:  # US/Canada number
+            return 'America/New_York'
+            
+        # For other countries, you can add more specific timezone mappings
+        # For now, default to UTC
+        return 'UTC'
+        
     except Exception as e:
         logger.error(f"Error getting timezone: {str(e)}")
-        return 'America/New_York'  # Default fallback
+        return 'UTC'  # Default fallback
 
 
 def get_available_slots(credentials, start_time, end_time, duration_minutes=60):
