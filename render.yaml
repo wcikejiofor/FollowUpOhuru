@@ -12,6 +12,19 @@ services:
           name: calendar-db
           property: connectionString
 
+  - type: worker
+    name: reminder-worker
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py process_reminders --interval 60
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.7
+      - key: DATABASE_URL
+        fromDatabase:
+          name: calendar-db
+          property: connectionString
+
 databases:
   - name: calendar-db
     databaseName: calendar
