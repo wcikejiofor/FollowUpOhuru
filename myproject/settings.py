@@ -89,7 +89,9 @@ CSRF_TRUSTED_ORIGINS = [
     'https://followupohuru.onrender.com',
     'https://checkout.chiresearchai.com',
     'http://localhost:8000',
-    'https://localhost:8000'
+    'https://localhost:8000',
+    'http://127.0.0.1:8000',
+    'https://127.0.0.1:8000'
 ]
 # Twilio Settings
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
@@ -307,14 +309,14 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',  # Move this back to top
-    'scheduler.middleware.CustomCommonMiddleware',
+    'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.common.CommonMiddleware',
 ]
 
 ROOT_URLCONF = 'myproject.urls'

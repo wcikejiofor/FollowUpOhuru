@@ -330,6 +330,7 @@ def get_timezone_from_phone(phone_number):
     except Exception as e:
         logger.error(f"Error getting timezone for {phone_number}: {str(e)}")
         logger.error(traceback.format_exc())
+        # Always return a valid timezone, never None
         return 'UTC'  # Default fallback
 
 

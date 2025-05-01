@@ -372,16 +372,14 @@ class EventManager:
             tz_name = get_timezone_from_phone(phone_number)
             logger.info(f"Got timezone name: {tz_name} for phone number {phone_number}")
             
-            if not tz_name:
-                logger.error(f"Could not determine timezone for phone number {phone_number}")
-                return False, "Could not determine your timezone. Please try again."
-            
             try:
                 user_tz = pytz.timezone(tz_name)
                 logger.info(f"Successfully created timezone object for {tz_name}")
             except Exception as e:
                 logger.error(f"Error creating timezone object for {tz_name}: {str(e)}")
-                return False, "Invalid timezone configuration. Please try again."
+                # Fall back to UTC if there's an error
+                user_tz = pytz.UTC
+                logger.info(f"Falling back to UTC timezone")
 
             # Parse preferred time
             preferred_time = dateparser.parse(
