@@ -30,6 +30,8 @@ services:
         value: 1
       - key: RENDER
         value: true
+      - key: DEBUG
+        value: "True"
 
 databases:
   - name: calendar-db

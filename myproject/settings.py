@@ -115,6 +115,12 @@ DATABASES = {
 
 # Log database configuration
 logger.info(f"Database configuration: {DATABASES['default']}")
+logger.info(f"DATABASE_URL environment variable: {os.getenv('DATABASE_URL')}")
+logger.info(f"Database engine: {DATABASES['default'].get('ENGINE')}")
+logger.info(f"Database host: {DATABASES['default'].get('HOST')}")
+logger.info(f"Database port: {DATABASES['default'].get('PORT')}")
+logger.info(f"Database name: {DATABASES['default'].get('NAME')}")
+logger.info(f"Database user: {DATABASES['default'].get('USER')}")
 
 # Base URL
 BASE_URL = os.getenv('BASE_URL', 'https://checkout.chiresearchai.com')

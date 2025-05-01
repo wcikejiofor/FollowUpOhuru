@@ -312,19 +312,24 @@ def cancel_event(credentials, event_details, user_timezone):
 def get_timezone_from_phone(phone_number):
     """Get timezone from phone number or return default"""
     try:
+        logger.info(f"Attempting to get timezone for phone number: {phone_number}")
         # Parse the phone number
         parsed_number = phonenumbers.parse(phone_number)
+        logger.info(f"Parsed phone number: country_code={parsed_number.country_code}, national_number={parsed_number.national_number}")
         
         # For US numbers, we'll default to Eastern Time
         if parsed_number.country_code == 1:  # US/Canada number
+            logger.info("US/Canada number detected, using America/New_York timezone")
             return 'America/New_York'
             
         # For other countries, you can add more specific timezone mappings
         # For now, default to UTC
+        logger.info(f"Non-US number detected (country_code={parsed_number.country_code}), using UTC timezone")
         return 'UTC'
         
     except Exception as e:
-        logger.error(f"Error getting timezone: {str(e)}")
+        logger.error(f"Error getting timezone for {phone_number}: {str(e)}")
+        logger.error(traceback.format_exc())
         return 'UTC'  # Default fallback
 
 
